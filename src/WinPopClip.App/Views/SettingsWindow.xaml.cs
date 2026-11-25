@@ -41,10 +41,10 @@ public partial class SettingsWindow : Window
 
     private static readonly (string Key, string Title, string Glyph)[] SubPages =
     {
-        ("General", "常规与触发", "\xE713"),
-        ("Appearance", "外观、材质与尺寸", "\xE790"),
-        ("Plugins", "插件与 PopClip 扩展", "\xE945"),
-        ("Playground", "划词测试与诊断", "\xE943")
+        ("General", "常规设置", "\xE713"),
+        ("Appearance", "外观设置", "\xE790"),
+        ("Plugins", "插件扩展", "\xE945"),
+        ("Playground", "划词测试", "\xE943")
     };
 
     private sealed class PluginListItem

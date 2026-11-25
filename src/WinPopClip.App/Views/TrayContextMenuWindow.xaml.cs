@@ -27,7 +27,6 @@ public partial class TrayContextMenuWindow : Window
     private bool _isOpening;
 
     public event EventHandler? OpenSettingsRequested;
-    public event EventHandler? OpenAppearanceRequested;
     public event EventHandler? ReloadPluginsRequested;
     public event EventHandler? ExitRequested;
 
@@ -193,12 +192,6 @@ public partial class TrayContextMenuWindow : Window
     {
         HideMenu();
         OpenSettingsRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnOpenAppearanceClick(object sender, RoutedEventArgs e)
-    {
-        HideMenu();
-        OpenAppearanceRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnReloadPluginsClick(object sender, RoutedEventArgs e)

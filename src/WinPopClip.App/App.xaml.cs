@@ -73,7 +73,6 @@ public partial class App : Application
 
         _trayIcon = new TrayIconService(_settingsService, _themeService);
         _trayIcon.OpenSettingsRequested += (_, _) => OpenSettingsWindow();
-        _trayIcon.OpenAppearanceRequested += (_, _) => OpenSettingsWindow("Appearance");
         _trayIcon.ReloadPluginsRequested += (_, _) =>
         {
             _pluginRegistry.Reload();

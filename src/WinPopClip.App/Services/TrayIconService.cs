@@ -20,7 +20,6 @@ public sealed class TrayIconService : IDisposable
     private readonly TrayContextMenuWindow _contextMenu;
 
     public event EventHandler? OpenSettingsRequested;
-    public event EventHandler? OpenAppearanceRequested;
     public event EventHandler? ReloadPluginsRequested;
     public event EventHandler? ExitRequested;
 
@@ -31,7 +30,6 @@ public sealed class TrayIconService : IDisposable
 
         _contextMenu = new TrayContextMenuWindow(_settingsService, _themeService);
         _contextMenu.OpenSettingsRequested += (_, _) => OpenSettingsRequested?.Invoke(this, EventArgs.Empty);
-        _contextMenu.OpenAppearanceRequested += (_, _) => OpenAppearanceRequested?.Invoke(this, EventArgs.Empty);
         _contextMenu.ReloadPluginsRequested += (_, _) => ReloadPluginsRequested?.Invoke(this, EventArgs.Empty);
         _contextMenu.ExitRequested += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 

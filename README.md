@@ -4,13 +4,13 @@
 
 **轻盈、精致、可扩展的 Windows 划词浮动工具栏（PopClip for Windows）**
 
-[![Version](https://img.shields.io/badge/version-v1.0-4F46E5?style=flat-square)](../../releases)
+[![Version](https://img.shields.io/badge/version-v1.01-4F46E5?style=flat-square)](../../releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-0078D4?style=flat-square)](#下载与使用)
 [![Framework](https://img.shields.io/badge/.NET-10%20WPF-512BD4?style=flat-square)](#从源码构建)
 [![PopClip](https://img.shields.io/badge/PopClip-Compatible-10B981?style=flat-square)](#兼容-popclip-与插件扩展)
 [![License](https://img.shields.io/badge/license-MIT-64748B?style=flat-square)](LICENSE)
 
-[下载 v1.0 独立版](../../releases) · [核心特性](#核心特性) · [兼容 PopClip](#兼容-popclip-与插件扩展) · [从源码构建](#从源码构建)
+[下载 v1.01 独立版](../../releases) · [核心特性](#核心特性) · [兼容 PopClip](#兼容-popclip-与插件扩展) · [从源码构建](#从源码构建)
 
 <br />
 
@@ -53,7 +53,7 @@
 
 ## 下载与使用
 
-1. 前往本仓库的 **[Releases](../../releases)** 页面，下载最新版 `Selector-v1.0-win-x64.zip`（内置 .NET 运行时，**无需额外安装环境**）。
+1. 前往本仓库的 **[Releases](../../releases)** 页面，下载最新版 `Selector-v1.01-win-x64.zip`（内置 .NET 运行时，**无需额外安装环境**）。
 2. 解压至任意目录，双击 **`Selector.exe`** 即可运行。
 3. 在任意应用中拖选或双击文本即可体验划词浮窗；右键系统托盘图标可随时暂停/启用监听、切换主题或进入偏好设置。
 

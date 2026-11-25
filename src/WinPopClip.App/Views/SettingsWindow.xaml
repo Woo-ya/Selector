@@ -289,33 +289,33 @@
                                                        Tag="General"
                                                        Height="146"
                                                        Icon="{StaticResource Glyph.Settings}"
-                                                       Header="常规与触发"
+                                                       Header="常规设置"
                                                        Click="OnPageTileClick" />
                                     <controls:PageTile x:Name="TileAppearance"
                                                        Tag="Appearance"
                                                        Height="146"
                                                        Icon="{StaticResource Glyph.Color}"
-                                                       Header="外观、材质与尺寸"
+                                                       Header="外观设置"
                                                        Click="OnPageTileClick" />
                                     <controls:PageTile x:Name="TilePlugins"
                                                        Tag="Plugins"
                                                        Height="146"
                                                        Icon="{StaticResource Glyph.Lightning}"
-                                                       Header="插件与 PopClip 扩展"
+                                                       Header="插件扩展"
                                                        Click="OnPageTileClick" />
                                     <controls:PageTile x:Name="TilePlayground"
                                                        Tag="Playground"
                                                        Height="146"
                                                        Icon="{StaticResource Glyph.Code}"
-                                                       Header="划词测试与诊断"
+                                                       Header="划词测试"
                                                        Click="OnPageTileClick" />
                                 </UniformGrid>
                             </StackPanel>
 
                             <!-- Subtle Footer Version Line -->
-                            <DockPanel Grid.Row="3" Margin="2,14,2,0">
+                            <DockPanel Grid.Row="3" Margin="2,14,2,0" LastChildFill="False">
                                 <TextBlock DockPanel.Dock="Left" Text="Selector · 轻盈的 Windows 划词浮窗工具" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
-                                <TextBlock DockPanel.Dock="Right" Text="v1.0" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="v1.01" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
                             </DockPanel>
                         </Grid>
                     </ScrollViewer>
@@ -354,7 +354,7 @@
                                     <StackPanel Margin="26,14,26,24">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
                                             <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
-                                            <TextBlock Text="常规与触发" Style="{StaticResource TitleTextStyle}" />
+                                            <TextBlock Text="常规设置" Style="{StaticResource TitleTextStyle}" />
                                         </StackPanel>
 
                                         <TextBlock Text="触发方式" Style="{StaticResource SectionHeaderTextStyle}" Margin="2,0,0,8" />
@@ -411,7 +411,7 @@
                                     <StackPanel Margin="26,14,26,24">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                                             <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
-                                            <TextBlock Text="外观、材质与尺寸" Style="{StaticResource TitleTextStyle}" />
+                                            <TextBlock Text="外观设置" Style="{StaticResource TitleTextStyle}" />
                                         </StackPanel>
 
                                         <!-- Live WYSIWYG Preview Stage (GPU BitmapCache + RadialGradient orbs for 60fps zero-stutter scrolling) -->
@@ -588,7 +588,7 @@
 
                                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
                                         <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
-                                        <TextBlock Text="插件与 PopClip 扩展" Style="{StaticResource TitleTextStyle}" />
+                                        <TextBlock Text="插件扩展" Style="{StaticResource TitleTextStyle}" />
                                     </StackPanel>
 
                                     <WrapPanel Grid.Row="1" Margin="0,0,0,12">
@@ -794,7 +794,7 @@
 
                                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
                                         <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
-                                        <TextBlock Text="划词测试与诊断" Style="{StaticResource TitleTextStyle}" />
+                                        <TextBlock Text="划词测试" Style="{StaticResource TitleTextStyle}" />
                                     </StackPanel>
 
                                     <TextBlock Grid.Row="1" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,6"
