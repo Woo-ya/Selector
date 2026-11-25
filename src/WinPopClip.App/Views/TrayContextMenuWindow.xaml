@@ -1,0 +1,258 @@
+<Window x:Class="WinPopClip.App.Views.TrayContextMenuWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        FontFamily="{StaticResource TextFont}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Grayscale"
+        PreviewKeyDown="OnPreviewKeyDown"
+        Deactivated="OnWindowDeactivated"
+        Closing="OnWindowClosing">
+    <Window.Resources>
+        <Style x:Key="TrayActionItemStyle" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtlePressedBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TrayDangerItemStyle" TargetType="Button" BasedOn="{StaticResource TrayActionItemStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#22C42B1C" />
+                                <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#36C42B1C" />
+                                <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TrayThemeOptionStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12" RenderTransformOrigin="0.5,1">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="MenuSlideTransform" Y="0" />
+        </Grid.RenderTransform>
+
+        <Border Width="264"
+                Background="{DynamicResource FlyoutBrush}"
+                BorderBrush="{DynamicResource FlyoutBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="6">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="6" Opacity="0.28" />
+            </Border.Effect>
+
+            <StackPanel>
+                <!-- Header: Brand Logo + Name + Live Status -->
+                <Grid Margin="8,6,8,8">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ContentControl x:Name="MenuLogoHost" Width="20" Height="20" VerticalAlignment="Center" />
+                        <TextBlock Text="Selector" FontSize="13.5" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Border HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource ControlAltBrush}"
+                            CornerRadius="9"
+                            Padding="8,3">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="StatusDot" Width="6" Height="6" Margin="0,0,5,0" Fill="{DynamicResource SuccessBrush}" />
+                            <TextBlock x:Name="StatusLabel" Text="运行中" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Master Enable Switch Row -->
+                <Border Background="{DynamicResource CardBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="7"
+                        Padding="10,7"
+                        Margin="2,0,2,6">
+                    <Grid>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="启用划词浮窗" FontSize="13" FontWeight="Medium" />
+                            <TextBlock x:Name="EnableSubText" Text="全局监听鼠标拖拽划词" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,0" />
+                        </StackPanel>
+                        <CheckBox x:Name="EnableToggle"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource ToggleSwitchStyle}"
+                                  Checked="OnEnableToggleChanged"
+                                  Unchecked="OnEnableToggleChanged" />
+                    </Grid>
+                </Border>
+
+                <!-- Theme Switcher Section (Synced with Settings & Floating Toolbar) -->
+                <Border Background="{DynamicResource CardBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="7"
+                        Padding="8,7,8,8"
+                        Margin="2,0,2,6">
+                    <StackPanel>
+                        <DockPanel Margin="2,0,2,6">
+                            <TextBlock Text="主题模式" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBlock x:Name="ThemeEffectiveText"
+                                       DockPanel.Dock="Right"
+                                       HorizontalAlignment="Right"
+                                       Text="深色"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                        </DockPanel>
+                        <Border Background="{DynamicResource ControlAltBrush}" CornerRadius="6" Padding="2">
+                            <UniformGrid Columns="3">
+                                <Button x:Name="ThemeSystemBtn" Style="{StaticResource TrayThemeOptionStyle}" Click="OnThemeSystemClick">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ContentControl x:Name="ThemeSystemIcon" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="系统" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="ThemeLightBtn" Style="{StaticResource TrayThemeOptionStyle}" Click="OnThemeLightClick">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ContentControl x:Name="ThemeLightIcon" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="浅色" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="ThemeDarkBtn" Style="{StaticResource TrayThemeOptionStyle}" Click="OnThemeDarkClick">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ContentControl x:Name="ThemeDarkIcon" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="深色" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </UniformGrid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="6,2,6,4" />
+
+                <!-- Navigation & Utility Actions -->
+                <Button Style="{StaticResource TrayActionItemStyle}" Click="OnOpenSettingsClick">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="M 8,2.2 L 9.1,3.5 L 10.8,3.2 L 11.4,4.8 L 13,5.5 L 12.6,7.2 L 13.8,8.5 L 12.6,9.8 L 13,11.5 L 11.4,12.2 L 10.8,13.8 L 9.1,13.5 L 8,14.8 L 6.9,13.5 L 5.2,13.8 L 4.6,12.2 L 3,11.5 L 3.4,9.8 L 2.2,8.5 L 3.4,7.2 L 3,5.5 L 4.6,4.8 L 5.2,3.2 L 6.9,3.5 Z M 8,6.2 A 2.3,2.3 0 1 0 8,10.8 A 2.3,2.3 0 1 0 8,6.2 Z"
+                              Width="15" Height="15" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.25" Fill="Transparent" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="偏好设置与插件管理..." FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource TrayActionItemStyle}" Click="OnOpenAppearanceClick">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="M 2,4.5 H 14 M 2,8.5 H 14 M 2,12.5 H 14 M 5.5,2.8 V 6.2 M 10.5,6.8 V 10.2 M 6.5,10.8 V 14.2"
+                              Width="15" Height="15" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.35" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="外观、材质与尺寸..." FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource TrayActionItemStyle}" Click="OnReloadPluginsClick">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="M 13,7.5 A 5.2,5.2 0 1 1 11.2,3.6 M 12.8,1.8 V 4.8 H 9.8"
+                              Width="15" Height="15" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.35" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                              Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="重新加载插件" FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="6,4,6,4" />
+
+                <!-- Exit -->
+                <Button Style="{StaticResource TrayDangerItemStyle}" Click="OnExitClick">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="M 8,2 V 7.5 M 4.8,4.2 A 5,5 0 1 0 11.2,4.2"
+                              Width="15" Height="15" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="退出 Selector" FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

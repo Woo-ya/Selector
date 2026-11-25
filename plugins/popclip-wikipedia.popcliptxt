@@ -1,0 +1,7 @@
+#popclip
+name: 维基百科
+identifier: popclip.sample.wikipedia
+icon: circle W
+description: PopClip YAML Snippet 示例：在维基百科搜索选中词条
+requirements: [text, singleline]
+url: https://zh.wikipedia.org/wiki/Special:Search?search=***

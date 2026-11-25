@@ -1,0 +1,15 @@
+{
+  "id": "sample.github-search",
+  "name": "GitHub 搜索",
+  "icon": "symbol:code",
+  "description": "在 GitHub 中搜索选中代码或关键字",
+  "version": "1.0.0",
+  "author": "Selector",
+  "kind": "Url",
+  "requirements": ["text", "singleline"],
+  "maxLength": 160,
+  "after": "None",
+  "action": {
+    "urlTemplate": "https://github.com/search?q={encodedText}&type=repositories"
+  }
+}

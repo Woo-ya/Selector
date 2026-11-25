@@ -1,0 +1,843 @@
+<Window x:Class="WinPopClip.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:WinPopClip.App.Views.Controls"
+        Title="Selector"
+        Icon="pack://application:,,,/Assets/selector.ico"
+        Width="960"
+        Height="690"
+        MinWidth="760"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource TextFont}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Grayscale"
+        PreviewKeyDown="OnWindowPreviewKeyDown">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="48" GlassFrameThickness="0" ResizeBorderThickness="6" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- DropShelf-style Theme Preview Tile -->
+        <Style x:Key="ThemeTileStyle" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Padding="6" Background="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentFaintBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Subpage back button with crisp vector left-arrow icon -->
+        <Style x:Key="BackButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Margin" Value="-6,2,10,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}" />
+            <Setter Property="ToolTip" Value="返回概览 (Esc)" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6">
+                            <Path Data="M 8.5,2 L 2.5,8 L 8.5,14 M 3,8 H 14"
+                                  Width="16"
+                                  Height="16"
+                                  Stroke="{TemplateBinding Foreground}"
+                                  StrokeThickness="1.65"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtlePressedBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Peeking stacked card edge button at bottom of settings sheet -->
+        <Style x:Key="StackEdgeTabStyle" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource CardBrush}"
+                                BorderBrush="{DynamicResource SheetBorderBrush}"
+                                BorderThickness="1,0,1,1"
+                                CornerRadius="0,0,10,10"
+                                Padding="16,6,16,8"
+                                Margin="4,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Per-plugin row move up/down vector icon button -->
+        <Style x:Key="PluginRowMoveButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtlePressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.28" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- DropShelf-aligned 48px Frameless TitleBar -->
+        <Grid Grid.Row="0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                <ContentControl x:Name="TitleLogoHost" Width="18" Height="18" VerticalAlignment="Center" />
+                <TextBlock Text="Selector" Margin="10,0,0,1" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                <!-- Live Health / Pause Status Indicator -->
+                <StackPanel x:Name="StatusIndicator"
+                            Orientation="Horizontal"
+                            Margin="16,0,0,0"
+                            Background="Transparent"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            ToolTip="当前划词监听状态">
+                    <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,1,6,0" VerticalAlignment="Center" Fill="{DynamicResource SuccessBrush}" />
+                    <TextBlock x:Name="StatusText" Text="正在监听划词" FontSize="12" VerticalAlignment="Center" Margin="0,0,0,1"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Custom Caption Buttons (46x48 crisp vector icons) -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource MinimizeCaptionButtonStyle}" Click="OnMinimizeClick" ToolTip="最小化" />
+                <Button x:Name="MaxRestoreButton" Style="{StaticResource MaximizeCaptionButtonStyle}" Click="OnMaxRestoreClick" ToolTip="最大化" />
+                <Button Style="{StaticResource CloseCaptionButtonStyle}" Click="OnCloseCaptionClick" ToolTip="最小化到托盘" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Main Content Stage -->
+        <Border x:Name="ContentLayer"
+                Grid.Row="1"
+                Background="{DynamicResource LayerBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
+                BorderThickness="0,1,0,0"
+                SizeChanged="OnContentLayerSizeChanged">
+            <Grid x:Name="PageStage" ClipToBounds="True">
+
+                <!-- ═══════════════ LAYER 1: OVERVIEW HOME PAGE ═══════════════ -->
+                <Grid x:Name="OverviewHost" RenderTransformOrigin="0.5,0.45">
+                    <Grid.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="OverviewScale" ScaleX="1" ScaleY="1" />
+                            <TranslateTransform x:Name="OverviewTranslate" Y="0" />
+                        </TransformGroup>
+                    </Grid.RenderTransform>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" controls:SmoothScroll.Enabled="True">
+                        <Grid MaxWidth="860" Margin="36,24,36,28">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Overview Header Row -->
+                            <Grid Grid.Row="0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="概览" Style="{StaticResource TitleTextStyle}" />
+                                    <Border Background="{DynamicResource AccentFaintBrush}" CornerRadius="10" Padding="9,3" Margin="12,4,0,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="OverviewThemePill" Text="跟随系统" FontSize="11.5" FontWeight="Medium" Foreground="{DynamicResource AccentTextBrush}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <CheckBox x:Name="OverviewMasterToggle"
+                                              Style="{StaticResource ToggleSwitchStyle}"
+                                              Margin="0,0,14,0"
+                                              Checked="OnMasterEnabledChanged"
+                                              Unchecked="OnMasterEnabledChanged" />
+                                    <Button Style="{StaticResource AccentButtonStyle}" Padding="15,6,15,7" Click="OnQuickTestToolbarClick">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{StaticResource Glyph.Lightning}" FontFamily="{StaticResource IconFont}" FontSize="13" Margin="0,1,7,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="体验划词浮窗" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Dismissible Getting Started 3-Card Strip (DropShelf Style) -->
+                            <StackPanel x:Name="GettingStartedSection" Grid.Row="1">
+                                <Grid>
+                                    <TextBlock Text="快速上手" Style="{StaticResource SectionHeaderTextStyle}" Margin="2,20,0,8" />
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Width="28"
+                                            Height="28"
+                                            MinHeight="0"
+                                            Padding="0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
+                                            Margin="0,0,0,4"
+                                            ToolTip="隐藏入门提示"
+                                            Click="OnDismissGettingStartedClick">
+                                        <Path Data="M 1,1 L 9,9 M 9,1 L 1,9"
+                                              Width="10"
+                                              Height="10"
+                                              Stroke="{DynamicResource TextSecondaryBrush}"
+                                              StrokeThickness="1.35"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" />
+                                    </Button>
+                                </Grid>
+                                <UniformGrid Columns="3">
+                                    <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,6,0" Padding="16,14,16,16">
+                                        <StackPanel>
+                                            <TextBlock Text="{StaticResource Glyph.Mouse}" FontFamily="{StaticResource IconFont}" FontSize="20" Foreground="{DynamicResource AccentTextBrush}" />
+                                            <TextBlock Text="划词即弹" Style="{StaticResource BodyStrongTextStyle}" Margin="0,10,0,4" />
+                                            <TextBlock Text="在浏览器、编辑器或任意应用中拖选文本，浮窗无焦点就近弹出。" Style="{StaticResource CaptionTextStyle}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource CardBorderStyle}" Margin="3,0,3,0" Padding="16,14,16,16">
+                                        <StackPanel>
+                                            <TextBlock Text="{StaticResource Glyph.Lightning}" FontFamily="{StaticResource IconFont}" FontSize="20" Foreground="{DynamicResource AccentTextBrush}" />
+                                            <TextBlock Text="兼容 PopClip" Style="{StaticResource BodyStrongTextStyle}" Margin="0,10,0,4" />
+                                            <TextBlock Text="支持 URL、JS、Shell 与 HTTP 插件，划选 #popclip 片段即可一键安装。" Style="{StaticResource CaptionTextStyle}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource CardBorderStyle}" Margin="6,0,0,0" Padding="16,14,16,16">
+                                        <StackPanel>
+                                            <TextBlock Text="{StaticResource Glyph.Color}" FontFamily="{StaticResource IconFont}" FontSize="20" Foreground="{DynamicResource AccentTextBrush}" />
+                                            <TextBlock Text="材质与尺寸定制" Style="{StaticResource BodyStrongTextStyle}" Margin="0,10,0,4" />
+                                            <TextBlock Text="亚克力、实体、液态玻璃三款材质，配合圆角与自定义尺寸自由搭配。" Style="{StaticResource CaptionTextStyle}" />
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <!-- 2x2 Adaptive PageTile Grid (DropShelf Overview Signature) -->
+                            <StackPanel Grid.Row="2">
+                                <TextBlock Text="设置与工作台" Style="{StaticResource SectionHeaderTextStyle}" Margin="2,20,0,8" />
+                                <UniformGrid x:Name="PageCardsGrid" Columns="2" Margin="0,0,-8,0">
+                                    <controls:PageTile x:Name="TileGeneral"
+                                                       Tag="General"
+                                                       Height="146"
+                                                       Icon="{StaticResource Glyph.Settings}"
+                                                       Header="常规与触发"
+                                                       Click="OnPageTileClick" />
+                                    <controls:PageTile x:Name="TileAppearance"
+                                                       Tag="Appearance"
+                                                       Height="146"
+                                                       Icon="{StaticResource Glyph.Color}"
+                                                       Header="外观、材质与尺寸"
+                                                       Click="OnPageTileClick" />
+                                    <controls:PageTile x:Name="TilePlugins"
+                                                       Tag="Plugins"
+                                                       Height="146"
+                                                       Icon="{StaticResource Glyph.Lightning}"
+                                                       Header="插件与 PopClip 扩展"
+                                                       Click="OnPageTileClick" />
+                                    <controls:PageTile x:Name="TilePlayground"
+                                                       Tag="Playground"
+                                                       Height="146"
+                                                       Icon="{StaticResource Glyph.Code}"
+                                                       Header="划词测试与诊断"
+                                                       Click="OnPageTileClick" />
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <!-- Subtle Footer Version Line -->
+                            <DockPanel Grid.Row="3" Margin="2,14,2,0">
+                                <TextBlock DockPanel.Dock="Left" Text="Selector · 轻盈的 Windows 划词浮窗工具" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="v1.0" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+                            </DockPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- ═══════════════ LAYER 2: ANIMATED SETTINGS SHEET + STACKED PEEKING EDGES ═══════════════ -->
+                <Grid x:Name="SheetHost" Visibility="Collapsed" RenderTransformOrigin="0.5,0.4">
+                    <Grid.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="SheetScale" ScaleX="1" ScaleY="1" />
+                            <TranslateTransform x:Name="SheetTranslate" Y="0" />
+                        </TransformGroup>
+                    </Grid.RenderTransform>
+
+                    <Grid MaxWidth="908" Margin="24,14,24,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Main Settings Sheet Card (DropShelf Radial Accent Wash) -->
+                        <Border x:Name="PageSheetBorder"
+                                Grid.Row="0"
+                                Background="{DynamicResource SheetBrush}"
+                                BorderBrush="{DynamicResource SheetBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="0,6">
+                            <Grid x:Name="SheetPagesContainer">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="SheetSwapTranslate" X="0" />
+                                </Grid.RenderTransform>
+
+                                <!-- ─── SUBPAGE 1: GENERAL & TRIGGERS ─── -->
+                                <ScrollViewer x:Name="PageGeneral" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" controls:SmoothScroll.Enabled="True">
+                                    <StackPanel Margin="26,14,26,24">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                                            <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
+                                            <TextBlock Text="常规与触发" Style="{StaticResource TitleTextStyle}" />
+                                        </StackPanel>
+
+                                        <TextBlock Text="触发方式" Style="{StaticResource SectionHeaderTextStyle}" Margin="2,0,0,8" />
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Power}" Header="启用划词浮窗" Description="关闭后暂时停止响应全局划词，托盘图标保留随时可重新开启">
+                                            <CheckBox x:Name="GeneralMasterToggle" Style="{StaticResource ToggleSwitchStyle}" Checked="OnMasterEnabledChanged" Unchecked="OnMasterEnabledChanged" />
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Mouse}" Header="默认触发方式" Description="鼠标拖拽划词最贴近 macOS PopClip 体验；也可改为按住修饰键防误触">
+                                            <ListBox x:Name="TriggerModeSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnTriggerSegmentedChanged">
+                                                <ListBoxItem Tag="AutoOnSelection" Content="鼠标划词" />
+                                                <ListBoxItem Tag="RequireCtrlKey" Content="按住 Ctrl" />
+                                                <ListBoxItem Tag="RequireAltKey" Content="按住 Alt" />
+                                            </ListBox>
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Expand}" Header="双击选词触发" Description="在文字上快速双击选中单个词组后自动弹出浮窗">
+                                            <CheckBox x:Name="DoubleClickCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Paste}" Header="剪贴板兼容回退（可选）" Description="默认关闭以确保划词绝不触发复制；仅在不支持 UIA 的旧版应用中按需开启（开启后会完整备份并还原原剪贴板）">
+                                            <CheckBox x:Name="ClipboardFallbackCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Shield}" Header="独占全屏时自动禁用" Description="在全屏游戏或演示模式下暂停弹出（不影响正常最大化的浏览器）">
+                                            <CheckBox x:Name="FullscreenDisableCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
+                                        </controls:SettingsCard>
+
+                                        <TextBlock Text="灵敏度与排除应用" Style="{StaticResource SectionHeaderTextStyle}" />
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.ViewAll}" Header="浮窗动作上限与拖拽阈值" Description="设置最多同时显示的动作按钮数以及拖拽多少像素后触发">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="上限" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12.5" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <TextBox x:Name="MaxActionsBox" Width="56" Margin="0,0,14,0" />
+                                                <TextBlock Text="阈值(px)" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12.5" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <TextBox x:Name="DragThresholdBox" Width="56" />
+                                            </StackPanel>
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Shield}" Header="排除应用进程" Description="在这些进程中永不弹出浮窗（逗号分隔，不含 .exe）">
+                                            <TextBox x:Name="ExcludedAppsBox" Width="310" />
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Code}" Header="终端禁回退名单" Description="以下终端进程禁用 Ctrl+C 回退（仅走 UIA），避免中断运行中的命令">
+                                            <TextBox x:Name="ClipboardBlockedAppsBox" Width="310" />
+                                        </controls:SettingsCard>
+
+                                        <Button Style="{StaticResource AccentButtonStyle}" Content="保存过滤与数值设置" Margin="0,12,0,0" Padding="18,6,18,7" HorizontalAlignment="Left" Click="OnSaveGeneralFieldsClick" />
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- ─── SUBPAGE 2: APPEARANCE, MATERIAL, SIZE & CORNER RADIUS ─── -->
+                                <ScrollViewer x:Name="PageAppearance" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" controls:SmoothScroll.Enabled="True">
+                                    <StackPanel Margin="26,14,26,24">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                            <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
+                                            <TextBlock Text="外观、材质与尺寸" Style="{StaticResource TitleTextStyle}" />
+                                        </StackPanel>
+
+                                        <!-- Live WYSIWYG Preview Stage (GPU BitmapCache + RadialGradient orbs for 60fps zero-stutter scrolling) -->
+                                        <Border x:Name="PreviewStageBackdrop"
+                                                MinHeight="138"
+                                                CornerRadius="10"
+                                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                                BorderThickness="1"
+                                                Margin="0,0,0,16"
+                                                ClipToBounds="True"
+                                                Padding="16,14"
+                                                CacheMode="BitmapCache">
+                                            <Grid>
+                                                <Ellipse Width="280" Height="280" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-85,-115,0,0" IsHitTestVisible="False">
+                                                    <Ellipse.Fill>
+                                                        <RadialGradientBrush>
+                                                            <GradientStop Color="#4D4F46E5" Offset="0" />
+                                                            <GradientStop Color="#004F46E5" Offset="1" />
+                                                        </RadialGradientBrush>
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+                                                <Ellipse Width="300" Height="300" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="50,0,0,-135" IsHitTestVisible="False">
+                                                    <Ellipse.Fill>
+                                                        <RadialGradientBrush>
+                                                            <GradientStop Color="#3DA855F7" Offset="0" />
+                                                            <GradientStop Color="#00A855F7" Offset="1" />
+                                                        </RadialGradientBrush>
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+                                                <Ellipse Width="240" Height="240" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-100,-70,0" IsHitTestVisible="False">
+                                                    <Ellipse.Fill>
+                                                        <RadialGradientBrush>
+                                                            <GradientStop Color="#380EA5E9" Offset="0" />
+                                                            <GradientStop Color="#000EA5E9" Offset="1" />
+                                                        </RadialGradientBrush>
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <Border x:Name="PreviewPillBorder" CornerRadius="14" BorderThickness="1.15">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect x:Name="PreviewPillShadow" Color="#000000" BlurRadius="22" ShadowDepth="6" Opacity="0.32" />
+                                                        </Border.Effect>
+                                                        <Grid>
+                                                            <Border x:Name="PreviewAcrylicNoiseLayer" CornerRadius="13" Visibility="Collapsed" />
+                                                            <Border x:Name="PreviewLiquidGlassSheenLayer" CornerRadius="13" Visibility="Collapsed">
+                                                                <Grid>
+                                                                    <Border x:Name="PreviewLiquidGlassTopHighlight" VerticalAlignment="Top" Height="22" Margin="1,1,1,0" />
+                                                                    <Border x:Name="PreviewLiquidGlassInnerRim" BorderThickness="1" Margin="0.5" />
+                                                                </Grid>
+                                                            </Border>
+                                                            <Grid x:Name="PreviewContentHost" Margin="6,5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Border>
+                                                    <Polygon x:Name="PreviewBottomPointer" Points="0,0 12,0 6,6" HorizontalAlignment="Center" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Visual Theme Preview Tiles (DropShelf Signature!) -->
+                                        <TextBlock Text="软件主题" Style="{StaticResource SectionHeaderTextStyle}" Margin="2,0,0,8" />
+                                        <Border Style="{StaticResource CardBorderStyle}" Padding="16,12" Margin="0,0,0,4">
+                                            <StackPanel>
+                                                <ListBox x:Name="ThemeTileList"
+                                                         Background="Transparent"
+                                                         BorderThickness="0"
+                                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                         ItemContainerStyle="{StaticResource ThemeTileStyle}"
+                                                         SelectionChanged="OnThemeTileSelectionChanged">
+                                                    <ListBox.Template>
+                                                        <ControlTemplate TargetType="ListBox">
+                                                            <ItemsPresenter />
+                                                        </ControlTemplate>
+                                                    </ListBox.Template>
+                                                    <ListBox.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ListBox.ItemsPanel>
+
+                                                    <!-- System split mini preview -->
+                                                    <ListBoxItem Tag="System">
+                                                        <StackPanel Width="108">
+                                                            <Border Height="60" CornerRadius="6" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" ClipToBounds="True">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Border Grid.Column="0" Background="#F9F7F1" />
+                                                                    <Border Grid.Column="1" Background="#202020" />
+                                                                    <Border Grid.ColumnSpan="2" Height="16" Width="62" CornerRadius="6" Background="#D82B2D36" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                                </Grid>
+                                                            </Border>
+                                                            <TextBlock Text="跟随系统" FontSize="12.5" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                                        </StackPanel>
+                                                    </ListBoxItem>
+
+                                                    <!-- Light mini preview -->
+                                                    <ListBoxItem Tag="Light">
+                                                        <StackPanel Width="108">
+                                                            <Border Height="60" CornerRadius="6" Background="#F9F7F1" BorderBrush="#24000000" BorderThickness="1">
+                                                                <Border Height="16" Width="64" CornerRadius="6" Background="#FFFFFF" BorderBrush="#1A000000" BorderThickness="1" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                            </Border>
+                                                            <TextBlock Text="浅色模式" FontSize="12.5" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                                        </StackPanel>
+                                                    </ListBoxItem>
+
+                                                    <!-- Dark mini preview -->
+                                                    <ListBoxItem Tag="Dark">
+                                                        <StackPanel Width="108">
+                                                            <Border Height="60" CornerRadius="6" Background="#202020" BorderBrush="#33FFFFFF" BorderThickness="1">
+                                                                <Border Height="16" Width="64" CornerRadius="6" Background="#2E2E32" BorderBrush="#33FFFFFF" BorderThickness="1" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                            </Border>
+                                                            <TextBlock Text="深色模式" FontSize="12.5" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                                        </StackPanel>
+                                                    </ListBoxItem>
+                                                </ListBox>
+                                                <TextBlock x:Name="EffectiveThemeHintText" Style="{StaticResource CaptionTextStyle}" Margin="4,8,0,0" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="浮窗材质、圆角与尺寸" Style="{StaticResource SectionHeaderTextStyle}" />
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Brush}" Header="浮窗材质" Description="选择划词浮窗的表面视觉材质，立即生效">
+                                            <ListBox x:Name="MaterialSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnMaterialSegmentedChanged">
+                                                <ListBoxItem Tag="Acrylic" Content="亚克力" />
+                                                <ListBoxItem Tag="Solid" Content="实体" />
+                                                <ListBoxItem Tag="LiquidGlass" Content="液态玻璃" />
+                                            </ListBox>
+                                        </controls:SettingsCard>
+
+                                        <!-- Floating Toolbar Overall Size Scale Slider -->
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Resize}" Header="浮窗尺寸" Description="拖动滑块整体调节划词浮窗大小（75% ~ 150%），实时生效；双击数值可恢复 100%">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Slider x:Name="ToolbarScaleSlider" Width="210" Minimum="75" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="OnToolbarScaleChanged" />
+                                                <TextBlock x:Name="ToolbarScaleValueText"
+                                                           Text="100%"
+                                                           Width="52"
+                                                           TextAlignment="Right"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"
+                                                           Cursor="Hand"
+                                                           ToolTip="双击恢复默认大小 (100%)"
+                                                           MouseLeftButtonDown="OnToolbarScaleValueMouseDown" />
+                                            </StackPanel>
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Color}" Header="浮窗圆角" Description="自由调节胶囊圆角弧度（4px ~ 28px），按钮圆角随之联动">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Slider x:Name="CornerRadiusSlider" Width="210" Minimum="4" Maximum="28" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnCornerRadiusChanged" />
+                                                <TextBlock x:Name="CornerRadiusValueText" Text="14 px" Width="52" TextAlignment="Right" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.ViewAll}" Header="按钮图标模式" Description="在简洁纯图标与图标+文字两种形态之间切换">
+                                            <ListBox x:Name="DisplayModeSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnDisplayModeSegmentedChanged">
+                                                <ListBoxItem Tag="IconAndText" Content="图标 + 文字" />
+                                                <ListBoxItem Tag="IconOnly" Content="纯图标" />
+                                            </ListBox>
+                                        </controls:SettingsCard>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- ─── SUBPAGE 3: PLUGINS & POPCLIP EXTENSIONS ─── -->
+                                <Grid x:Name="PagePlugins" Visibility="Collapsed" Margin="26,14,26,20">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+                                        <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
+                                        <TextBlock Text="插件与 PopClip 扩展" Style="{StaticResource TitleTextStyle}" />
+                                    </StackPanel>
+
+                                    <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+                                        <Button Style="{StaticResource AccentButtonStyle}" Content="+ 新增插件" Margin="0,0,8,6" Click="OnAddPluginClick" />
+                                        <Button Content="导入 PopClip Snippet" Margin="0,0,8,6" Click="OnImportPopClipClick" />
+                                        <Button Content="编辑" Margin="0,0,6,6" Click="OnEditPluginClick" />
+                                        <Button Content="删除" Margin="0,0,8,6" Click="OnDeletePluginClick" />
+                                        <Button Content="重载 plugins/" Margin="0,0,6,6" Click="OnReloadPluginsClick" />
+                                        <Button Content="打开插件目录" Margin="0,0,0,6" Click="OnOpenPluginsFolderClick" />
+                                    </WrapPanel>
+
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.45*" />
+                                            <ColumnDefinition Width="14" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="6">
+                                            <ListBox x:Name="PluginsListBox"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     SelectionChanged="OnPluginSelectionChanged"
+                                                     HorizontalContentAlignment="Stretch"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                     ScrollViewer.CanContentScroll="False"
+                                                     PreviewMouseLeftButtonDown="OnPluginsListPreviewMouseLeftButtonDown"
+                                                     PreviewMouseMove="OnPluginsListPreviewMouseMove"
+                                                     PreviewMouseLeftButtonUp="OnPluginsListPreviewMouseLeftButtonUp"
+                                                     LostMouseCapture="OnPluginsListLostMouseCapture">
+                                                <ListBox.ItemContainerStyle>
+                                                    <Style TargetType="ListBoxItem">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Setter Property="Padding" Value="0" />
+                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="ListBoxItem">
+                                                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Margin="1">
+                                                                        <ContentPresenter HorizontalAlignment="Stretch" />
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+                                                                        </Trigger>
+                                                                        <Trigger Property="IsSelected" Value="True">
+                                                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </ListBox.ItemContainerStyle>
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Padding="6,7,6,7"
+                                                                BorderBrush="{DynamicResource DividerBrush}"
+                                                                BorderThickness="0,0,0,1"
+                                                                Background="Transparent"
+                                                                ToolTip="{Binding RowToolTip}">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="16" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="32" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <!-- Drag grip handle (hold anywhere on row to lift & drag) -->
+                                                                <Path Grid.Column="0"
+                                                                      Data="M 3,2.5 A 1,1 0 1 1 2.99,2.5 Z M 8,2.5 A 1,1 0 1 1 7.99,2.5 Z M 3,7 A 1,1 0 1 1 2.99,7 Z M 8,7 A 1,1 0 1 1 7.99,7 Z M 3,11.5 A 1,1 0 1 1 2.99,11.5 Z M 8,11.5 A 1,1 0 1 1 7.99,11.5 Z"
+                                                                      Width="10"
+                                                                      Height="14"
+                                                                      Fill="{DynamicResource TextTertiaryBrush}"
+                                                                      Opacity="0.65"
+                                                                      Cursor="SizeAll"
+                                                                      HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"
+                                                                      ToolTip="按住拖动可快速调整顺序" />
+
+                                                                <CheckBox Grid.Column="1"
+                                                                          IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                                          VerticalAlignment="Center"
+                                                                          Margin="4,0,8,0"
+                                                                          ToolTip="启用或停用此插件"
+                                                                          Click="OnPluginToggleClick" />
+
+                                                                <!-- Unified 30x30 icon container for consistent visual alignment -->
+                                                                <Border Grid.Column="2"
+                                                                        Width="30"
+                                                                        Height="30"
+                                                                        CornerRadius="7"
+                                                                        Background="{DynamicResource ControlAltBrush}"
+                                                                        VerticalAlignment="Center"
+                                                                        HorizontalAlignment="Center">
+                                                                    <ContentPresenter Content="{Binding IconVisual}"
+                                                                                      Width="16"
+                                                                                      Height="16"
+                                                                                      HorizontalAlignment="Center"
+                                                                                      VerticalAlignment="Center" />
+                                                                </Border>
+
+                                                                <StackPanel Grid.Column="3" Margin="10,0,8,0" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               FontWeight="SemiBold"
+                                                                               FontSize="13.5"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Text="{Binding Description}"
+                                                                               Style="{StaticResource CaptionTextStyle}"
+                                                                               TextWrapping="NoWrap"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               Margin="0,1,0,0" />
+                                                                </StackPanel>
+
+                                                                <!-- Compact Kind + Source tags -->
+                                                                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                                    <Border Background="{DynamicResource AccentFaintBrush}" CornerRadius="4" Padding="5,2" Margin="0,0,4,0">
+                                                                        <TextBlock Text="{Binding KindShortLabel}" FontSize="10" Foreground="{DynamicResource AccentTextBrush}" />
+                                                                    </Border>
+                                                                    <Border Background="{DynamicResource SubtleSelectedBrush}" CornerRadius="4" Padding="5,2">
+                                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                                    </Border>
+                                                                </StackPanel>
+
+                                                                <!-- Per-row Move Up / Move Down buttons acting strictly on this plugin -->
+                                                                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <Button Style="{StaticResource PluginRowMoveButtonStyle}"
+                                                                            IsEnabled="{Binding CanMoveUp}"
+                                                                            ToolTip="上移此插件"
+                                                                            Click="OnRowMoveUpClick">
+                                                                        <Path Data="M 3,8.5 L 7,4.5 L 11,8.5"
+                                                                              Width="14" Height="13"
+                                                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                              StrokeThickness="1.5"
+                                                                              StrokeStartLineCap="Round"
+                                                                              StrokeEndLineCap="Round"
+                                                                              StrokeLineJoin="Round" />
+                                                                    </Button>
+                                                                    <Button Style="{StaticResource PluginRowMoveButtonStyle}"
+                                                                            IsEnabled="{Binding CanMoveDown}"
+                                                                            ToolTip="下移此插件"
+                                                                            Click="OnRowMoveDownClick">
+                                                                        <Path Data="M 3,4.5 L 7,8.5 L 11,4.5"
+                                                                              Width="14" Height="13"
+                                                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                              StrokeThickness="1.5"
+                                                                              StrokeStartLineCap="Round"
+                                                                              StrokeEndLineCap="Round"
+                                                                              StrokeLineJoin="Round" />
+                                                                    </Button>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </Border>
+
+                                        <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}" Padding="16">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" controls:SmoothScroll.Enabled="True">
+                                                <StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+                                                        <Border Width="32" Height="32" CornerRadius="7" Background="{DynamicResource ControlAltBrush}" Margin="0,0,10,0">
+                                                            <ContentControl x:Name="DetailIconHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <TextBlock x:Name="DetailTitleText" Text="请选择左侧插件" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="DetailMetaText" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,6" LineHeight="18" />
+                                                    <TextBlock x:Name="DetailConditionText" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="18" />
+
+                                                    <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="0,0,0,12" />
+                                                    <TextBlock Text="图标样式（单色矢量 / PopClip 徽章）" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,8" />
+                                                    <DockPanel Margin="0,0,0,8">
+                                                        <Button x:Name="SaveIconButton" Style="{StaticResource AccentButtonStyle}" DockPanel.Dock="Right" Content="应用" Padding="12,4" Margin="6,0,0,0" Click="OnSaveIconClick" />
+                                                        <TextBox x:Name="PluginIconBox" />
+                                                    </DockPanel>
+                                                    <WrapPanel x:Name="InspectorIconPresets" Margin="0,0,0,12" />
+
+                                                    <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="0,0,0,12" />
+                                                    <TextBlock Text="插件配置项 (Options)" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,8" />
+                                                    <StackPanel x:Name="OptionsContainer" />
+                                                    <Button x:Name="SaveOptionsButton" Style="{StaticResource AccentButtonStyle}" Content="保存插件选项" Visibility="Collapsed" Margin="0,10,0,0" HorizontalAlignment="Left" Click="OnSaveOptionsClick" />
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+
+                                <!-- ─── SUBPAGE 4: PLAYGROUND & LIVE DIAGNOSTICS ─── -->
+                                <Grid x:Name="PagePlayground" Visibility="Collapsed" Margin="26,14,26,20">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="14" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="0.95*" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+                                        <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
+                                        <TextBlock Text="划词测试与诊断" Style="{StaticResource TitleTextStyle}" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="1" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,6"
+                                               Text="在下方可编辑测试区划选任意文字，或直接切到 Edge / 记事本 / VS Code 中划词，下方日志将实时输出捕获通道与动作匹配状态：" />
+
+                                    <TextBox x:Name="PlaygroundBox"
+                                             Grid.Row="2"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             FontSize="13.5"
+                                             Padding="12"
+                                             VerticalScrollBarVisibility="Auto" />
+
+                                    <DockPanel Grid.Row="4" Margin="0,0,0,6">
+                                        <Button DockPanel.Dock="Right" Content="清空日志" MinHeight="28" Padding="10,3" FontSize="12" Click="OnClearLogClick" />
+                                        <TextBlock Text="实时诊断日志" Style="{StaticResource BodyStrongTextStyle}" VerticalAlignment="Center" />
+                                    </DockPanel>
+
+                                    <TextBox x:Name="DiagnosticsBox"
+                                             Grid.Row="5"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             FontFamily="Consolas"
+                                             FontSize="12"
+                                             Background="{DynamicResource LogBgBrush}"
+                                             Foreground="{DynamicResource LogFgBrush}"
+                                             Padding="12"
+                                             VerticalScrollBarVisibility="Auto" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- DropShelf-inspired Peeking Stacked Card Edges for instant subpage switching -->
+                        <StackPanel x:Name="StackEdgeTabsPanel"
+                                    Grid.Row="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,-1,0,0" />
+                    </Grid>
+                </Grid>
+
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

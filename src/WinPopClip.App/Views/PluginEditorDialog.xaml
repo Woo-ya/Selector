@@ -1,0 +1,202 @@
+<Window x:Class="WinPopClip.App.Views.PluginEditorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Selector — 新增 / 编辑插件"
+        Icon="pack://application:,,,/Assets/selector.ico"
+        Width="610"
+        Height="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource AppBgBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource TextFont}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,6,0">
+                <TextBlock Text="基础信息与图标选择" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="85" />
+                        <ColumnDefinition Width="135" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="插件名称:" VerticalAlignment="Center" />
+                    <TextBox x:Name="NameBox" Grid.Column="1" Padding="6,4" Margin="0,0,12,0" />
+                    <TextBlock Text="图标/徽章:" Grid.Column="2" VerticalAlignment="Center" />
+                    <TextBox x:Name="IconBox" Grid.Column="3" Padding="6,4" Text="symbol:sparkle"
+                             ToolTip="支持单色矢量图标 symbol:search / symbol:copy，或 PopClip 徽章 square filled AI / circle W" />
+                </Grid>
+
+                <TextBlock Text="选择简洁矢量图标或徽章（也支持直接输入 Emoji 或 symbol:* / square filled AB）:"
+                           FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" Margin="90,0,0,5" />
+                <WrapPanel x:Name="IconPresetsPanel" Margin="90,0,0,10" />
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="插件 ID:" VerticalAlignment="Center" />
+                    <TextBox x:Name="IdBox" Grid.Column="1" Padding="6,4" ToolTip="留空将自动生成唯一 ID" />
+                </Grid>
+
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="描述:" VerticalAlignment="Center" />
+                    <TextBox x:Name="DescriptionBox" Grid.Column="1" Padding="6,4" />
+                </Grid>
+
+                <Separator Margin="0,4,0,12" />
+                <TextBlock Text="执行动作配置" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="85" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="动作类型:" VerticalAlignment="Center" />
+                    <ComboBox x:Name="KindCombo" Grid.Column="1" Margin="0,0,12,0" Padding="6,4" SelectionChanged="OnKindChanged">
+                        <ComboBoxItem Tag="Url" Content="URL 模板打开 (Url)" IsSelected="True" />
+                        <ComboBoxItem Tag="JavaScript" Content="PopClip JavaScript (JavaScript)" />
+                        <ComboBoxItem Tag="TextTransform" Content="文本变换 (TextTransform)" />
+                        <ComboBoxItem Tag="Shell" Content="本地脚本/命令 (Shell)" />
+                        <ComboBoxItem Tag="Http" Content="HTTP Webhook / API (Http)" />
+                    </ComboBox>
+                    <TextBlock Text="执行后行为:" Grid.Column="2" VerticalAlignment="Center" />
+                    <ComboBox x:Name="AfterCombo" Grid.Column="3" Padding="6,4">
+                        <ComboBoxItem Tag="None" Content="无 (None)" IsSelected="True" />
+                        <ComboBoxItem Tag="CopyResult" Content="复制结果 (CopyResult)" />
+                        <ComboBoxItem Tag="PasteResult" Content="原位粘贴替换 (PasteResult)" />
+                        <ComboBoxItem Tag="ShowResult" Content="气泡展示结果 (ShowResult)" />
+                    </ComboBox>
+                </Grid>
+
+                <!-- URL Panel -->
+                <StackPanel x:Name="UrlPanel" Margin="0,4,0,10">
+                    <TextBlock Text="URL 模板（支持 {encodedText}、{text}、{app}，兼容 PopClip 的 ***）:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="UrlTemplateBox" Padding="6,5" Text="https://www.google.com/search?q={encodedText}" />
+                </StackPanel>
+
+                <!-- PopClip JavaScript Panel -->
+                <StackPanel x:Name="JsPanel" Visibility="Collapsed" Margin="0,4,0,10">
+                    <TextBlock Text="JavaScript 脚本体（兼容 popclip.input.text / showText / copyText / pasteText / openUrl）:"
+                               Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="JsCodeBox" AcceptsReturn="True" Height="110" Padding="6,4" TextWrapping="Wrap"
+                             FontFamily="Consolas"
+                             Text="return popclip.input.text.toUpperCase();" />
+                    <CheckBox x:Name="JsNetworkCheck" Content="允许网络请求 (entitlements: [network])" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <!-- TextTransform Panel -->
+                <StackPanel x:Name="TransformPanel" Visibility="Collapsed" Margin="0,4,0,10">
+                    <TextBlock Text="变换类型:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <ComboBox x:Name="TransformOpCombo" Padding="6,4" Margin="0,0,0,8">
+                        <ComboBoxItem Content="uppercase" IsSelected="True" />
+                        <ComboBoxItem Content="lowercase" />
+                        <ComboBoxItem Content="titlecase" />
+                        <ComboBoxItem Content="trim" />
+                        <ComboBoxItem Content="single-line" />
+                        <ComboBoxItem Content="url-encode" />
+                        <ComboBoxItem Content="url-decode" />
+                        <ComboBoxItem Content="base64-encode" />
+                        <ComboBoxItem Content="base64-decode" />
+                        <ComboBoxItem Content="json-pretty" />
+                        <ComboBoxItem Content="regex-replace" />
+                    </ComboBox>
+                    <TextBlock Text="Regex 替换 Pattern（仅 regex-replace 时生效）:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="TransformPatternBox" Padding="6,4" Margin="0,0,0,6" />
+                    <TextBlock Text="Regex 替换目标 Replacement:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="TransformReplacementBox" Padding="6,4" />
+                </StackPanel>
+
+                <!-- Shell Panel -->
+                <StackPanel x:Name="ShellPanel" Visibility="Collapsed" Margin="0,4,0,10">
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="可执行程序:" VerticalAlignment="Center" />
+                        <TextBox x:Name="ShellExeBox" Grid.Column="1" Padding="6,4" Text="powershell" />
+                    </Grid>
+                    <CheckBox x:Name="ShellStdinCheck" Content="通过标准输入 (stdin) 传入选中文本（同时注入环境变量 SELECTOR_TEXT）" IsChecked="True" Margin="0,4,0,6" />
+                    <TextBlock Text="脚本内容 / 参数（PowerShell 支持直接编写脚本文本）:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="ShellScriptBox" AcceptsReturn="True" Height="84" Padding="6,4" TextWrapping="Wrap"
+                             FontFamily="Consolas"
+                             Text="$t = [Console]::In.ReadToEnd(); $t.ToUpper()" />
+                </StackPanel>
+
+                <!-- HTTP Panel -->
+                <StackPanel x:Name="HttpPanel" Visibility="Collapsed" Margin="0,4,0,10">
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="请求:" VerticalAlignment="Center" />
+                        <ComboBox x:Name="HttpMethodCombo" Grid.Column="1" Padding="6,4">
+                            <ComboBoxItem Content="POST" IsSelected="True" />
+                            <ComboBoxItem Content="GET" />
+                        </ComboBox>
+                        <TextBox x:Name="HttpUrlBox" Grid.Column="3" Padding="6,4" ToolTip="支持 {encodedText}" />
+                    </Grid>
+                    <TextBlock Text="JSON Body 模板（支持 {jsonText}）:" Margin="0,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="HttpBodyBox" AcceptsReturn="True" Height="74" Padding="6,4" FontFamily="Consolas"
+                             Text="{}{&quot;text&quot;: &quot;{jsonText}&quot;}" />
+                    <TextBlock Text="响应 JSON 提取路径（可选，如 data.result 或 choices.0.message.content）:" Margin="0,6,0,4" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="HttpJsonPathBox" Padding="6,4" />
+                </StackPanel>
+
+                <Separator Margin="0,4,0,12" />
+                <TextBlock Text="触发条件过滤（可选）" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="条件标签:" VerticalAlignment="Center" />
+                    <TextBox x:Name="RequirementsBox" Grid.Column="1" Padding="6,4" Text="text"
+                             ToolTip="逗号分隔，可选: text, url, email, number, editable, singleline, multiline" />
+                </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="正则匹配:" VerticalAlignment="Center" />
+                    <TextBox x:Name="RegexBox" Grid.Column="1" Padding="6,4" ToolTip="仅当选中文本满足该正则表达式时显示此动作" />
+                </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="限定进程:" VerticalAlignment="Center" />
+                    <TextBox x:Name="AllowedAppsBox" Grid.Column="1" Padding="6,4" ToolTip="逗号分隔进程名（不含 .exe），留空表示所有应用生效" />
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="取消" Width="88" Padding="0,6" Margin="0,0,8,0" IsCancel="True" />
+            <Button Content="保存插件" Width="100" Padding="0,6" Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0" IsDefault="True" Click="OnSaveClick" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,18 @@
+{
+  "id": "sample.powershell-reverse",
+  "name": "反转文本",
+  "icon": "symbol:swap",
+  "description": "示例 Shell 插件：调用 PowerShell 将选中文本倒序输出",
+  "version": "1.0.0",
+  "author": "Selector",
+  "kind": "Shell",
+  "requirements": ["text"],
+  "maxLength": 500,
+  "after": "ShowResult",
+  "action": {
+    "shellExecutable": "powershell",
+    "passTextViaStdin": true,
+    "shellScript": "$t = [Console]::In.ReadToEnd(); $chars = $t.ToCharArray(); [Array]::Reverse($chars); -join $chars",
+    "timeoutMs": 5000
+  }
+}

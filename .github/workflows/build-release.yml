@@ -1,0 +1,47 @@
+name: Build & Release Selector
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore WinPopClip.sln
+
+      - name: Build solution
+        run: dotnet build WinPopClip.sln --no-restore -c Release
+
+      - name: Run unit tests
+        run: dotnet run --project tests/WinPopClip.Tests/WinPopClip.Tests.csproj -c Release --no-build
+
+      - name: Publish Selector (win-x64 single-file)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          dotnet publish src/WinPopClip.App/WinPopClip.App.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+            -o dist/Selector
+          Compress-Archive -Path dist/Selector/* -DestinationPath dist/Selector-${{ github.ref_name }}-win-x64.zip -Force
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Selector-${{ github.ref_name }}-win-x64.zip
+          generate_release_notes: true
+        permissions:
+          contents: write

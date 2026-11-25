@@ -1,0 +1,15 @@
+{
+  "id": "sample.bing-translate",
+  "name": "必应翻译",
+  "icon": "symbol:translate",
+  "description": "在必应词典/翻译中查询选中文本",
+  "version": "1.0.0",
+  "author": "Selector",
+  "kind": "Url",
+  "requirements": ["text"],
+  "maxLength": 500,
+  "after": "None",
+  "action": {
+    "urlTemplate": "https://cn.bing.com/dict/search?q={encodedText}"
+  }
+}

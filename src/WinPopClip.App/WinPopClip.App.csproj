@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\selector.ico</ApplicationIcon>
+    <RootNamespace>WinPopClip.App</RootNamespace>
+    <AssemblyName>Selector</AssemblyName>
+    <Product>Selector</Product>
+    <Title>Selector</Title>
+    <Description>Selector — Windows 智能划词浮动工具栏与插件扩展引擎</Description>
+    <Company>Selector</Company>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WinPopClip.Core\WinPopClip.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\selector.ico" />
+    <None Include="Assets\selector.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugins\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="plugins" />
+  </ItemGroup>
+</Project>
