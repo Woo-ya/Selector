@@ -62,10 +62,9 @@ public sealed class DirectoryJsonPluginProvider : IPluginProvider
                     continue;
                 }
 
-                var popClipConfig = Path.Combine(subDir, "Config.json");
-                if (File.Exists(popClipConfig))
+                if (PopClipSnippetParser.TryParsePopClipExtFolder(subDir, out var extManifest, out _) && extManifest is not null)
                 {
-                    TryAddPopClipExtFolder(subDir, popClipConfig, loaded);
+                    loaded.Add(extManifest);
                 }
             }
         }
@@ -86,6 +85,11 @@ public sealed class DirectoryJsonPluginProvider : IPluginProvider
 
             manifest.Source = PluginSourceType.ExternalFile;
             manifest.SourceFilePath = filePath;
+            var manifestDir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrWhiteSpace(manifestDir) && !string.IsNullOrWhiteSpace(manifest.Icon))
+            {
+                manifest.Icon = PopClipSnippetParser.ResolveIconFileIfLocal(manifest.Icon, manifestDir);
+            }
             target.Add(manifest);
         }
         catch

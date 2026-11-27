@@ -58,6 +58,7 @@ public sealed class SettingsService
                     loaded.ToolbarScale = ThemeResolver.ClampToolbarScale(loaded.ToolbarScale);
                     loaded.ToolbarCustomWidth = ThemeResolver.ClampCustomWidth(loaded.ToolbarCustomWidth);
                     loaded.ToolbarCustomHeight = ThemeResolver.ClampCustomHeight(loaded.ToolbarCustomHeight);
+                    loaded.ToolbarPopupDurationMs = ThemeResolver.ResolvePopupDurationMs(loaded.ToolbarPopupSpeed, loaded.ToolbarPopupDurationMs);
                     Settings = loaded;
                     if (migrated)
                     {

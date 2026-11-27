@@ -28,20 +28,27 @@ jobs:
       - name: Run unit tests
         run: dotnet run --project tests/WinPopClip.Tests/WinPopClip.Tests.csproj -c Release --no-build
 
-      - name: Publish Selector (win-x64 single-file)
+      - name: Publish Selector Lite & Standalone (win-x64 single-file)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
+          dotnet publish src/WinPopClip.App/WinPopClip.App.csproj -c Release -r win-x64 --self-contained false `
+            -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+            -o dist/Selector-Lite
+          Compress-Archive -Path dist/Selector-Lite/Selector.exe, dist/Selector-Lite/plugins -DestinationPath dist/Selector-${{ github.ref_name }}-win-x64-lite.zip -Force
+
           dotnet publish src/WinPopClip.App/WinPopClip.App.csproj -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
-            -o dist/Selector
-          Compress-Archive -Path dist/Selector/* -DestinationPath dist/Selector-${{ github.ref_name }}-win-x64.zip -Force
+            -o dist/Selector-Standalone
+          Compress-Archive -Path dist/Selector-Standalone/Selector.exe, dist/Selector-Standalone/plugins -DestinationPath dist/Selector-${{ github.ref_name }}-win-x64-standalone.zip -Force
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Selector-${{ github.ref_name }}-win-x64.zip
+          files: |
+            dist/Selector-${{ github.ref_name }}-win-x64-lite.zip
+            dist/Selector-${{ github.ref_name }}-win-x64-standalone.zip
           generate_release_notes: true
         permissions:
           contents: write

@@ -12,6 +12,7 @@ public sealed class PluginRegistry
     private readonly SettingsService _settingsService;
     private readonly IReadOnlyList<IPluginProvider> _providers;
     private readonly List<PluginManifest> _plugins = new();
+    private readonly object _sync = new();
 
     public event EventHandler? PluginsChanged;
 
@@ -22,104 +23,166 @@ public sealed class PluginRegistry
         Reload();
     }
 
-    public IReadOnlyList<PluginManifest> GetAllPlugins() =>
-        _plugins.OrderBy(p => p.Order).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    public IReadOnlyList<PluginManifest> GetAllPlugins()
+    {
+        lock (_sync)
+        {
+            return _plugins.OrderBy(p => p.Order).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
 
-    public PluginManifest? GetById(string id) =>
-        _plugins.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    public PluginManifest? GetById(string id)
+    {
+        lock (_sync)
+        {
+            return _plugins.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     public IReadOnlyDictionary<string, string> GetResolvedOptions(PluginManifest plugin)
     {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var opt in plugin.Options)
+        lock (_sync)
         {
-            result[opt.Key] = opt.DefaultValue;
-        }
-
-        if (_settingsService.Settings.PluginStates.TryGetValue(plugin.Id, out var state))
-        {
-            foreach (var kv in state.OptionValues)
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var opt in plugin.Options)
             {
-                result[kv.Key] = kv.Value;
+                result[opt.Key] = opt.DefaultValue;
             }
-        }
 
-        return result;
+            if (_settingsService.Settings.PluginStates.TryGetValue(plugin.Id, out var state))
+            {
+                foreach (var kv in state.OptionValues)
+                {
+                    result[kv.Key] = kv.Value;
+                }
+            }
+
+            return result;
+        }
     }
 
     public void Reload()
     {
-        var settings = _settingsService.Settings;
-        var merged = new Dictionary<string, PluginManifest>(StringComparer.OrdinalIgnoreCase);
-        var nextOrder = 0;
-
-        foreach (var provider in _providers)
+        lock (_sync)
         {
-            foreach (var raw in provider.LoadPlugins())
+            var settings = _settingsService.Settings;
+            var merged = new Dictionary<string, PluginManifest>(StringComparer.OrdinalIgnoreCase);
+            var nextOrder = 0;
+
+            foreach (var provider in _providers)
             {
-                var plugin = raw.Clone();
+                foreach (var raw in provider.LoadPlugins())
+                {
+                    var plugin = raw.Clone();
+                    plugin.Order = nextOrder++;
+                    merged[plugin.Id] = plugin;
+                }
+            }
+
+            foreach (var custom in settings.CustomPlugins)
+            {
+                var plugin = custom.Clone();
+                plugin.Source = PluginSourceType.UserCustom;
                 plugin.Order = nextOrder++;
                 merged[plugin.Id] = plugin;
             }
-        }
 
-        foreach (var custom in settings.CustomPlugins)
-        {
-            var plugin = custom.Clone();
-            plugin.Source = PluginSourceType.UserCustom;
-            plugin.Order = nextOrder++;
-            merged[plugin.Id] = plugin;
-        }
-
-        // Apply saved state overrides (enabled + ordering + custom icon)
-        foreach (var plugin in merged.Values)
-        {
-            if (settings.PluginStates.TryGetValue(plugin.Id, out var state))
+            // Apply saved state overrides (enabled + ordering + custom icon)
+            foreach (var plugin in merged.Values)
             {
-                plugin.Enabled = state.Enabled;
-                plugin.Order = state.Order;
-                if (!string.IsNullOrWhiteSpace(state.CustomIcon))
+                plugin.DefaultIcon = plugin.Icon;
+                if (settings.PluginStates.TryGetValue(plugin.Id, out var state))
                 {
-                    plugin.Icon = state.CustomIcon;
+                    plugin.Enabled = state.Enabled;
+                    plugin.Order = state.Order;
+                    plugin.DisplayMode = state.DisplayMode;
+                    if (!string.IsNullOrWhiteSpace(state.CustomIcon))
+                    {
+                        plugin.Icon = state.CustomIcon;
+                    }
                 }
             }
+
+            _plugins.Clear();
+            _plugins.AddRange(merged.Values.OrderBy(p => p.Order));
+            NormalizeOrders();
         }
 
-        _plugins.Clear();
-        _plugins.AddRange(merged.Values.OrderBy(p => p.Order));
-        NormalizeOrders();
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetEnabled(string pluginId, bool enabled)
     {
-        var plugin = GetById(pluginId);
-        if (plugin is null) return;
+        lock (_sync)
+        {
+            var plugin = _plugins.FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (plugin is null) return;
 
-        plugin.Enabled = enabled;
-        EnsureState(plugin).Enabled = enabled;
-        _settingsService.Save();
+            plugin.Enabled = enabled;
+            EnsureState(plugin).Enabled = enabled;
+            _settingsService.Save();
+        }
+
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetCustomIcon(string pluginId, string icon)
     {
-        var plugin = GetById(pluginId);
-        if (plugin is null) return;
-
-        var trimmed = string.IsNullOrWhiteSpace(icon) ? "⚡" : icon.Trim();
-        plugin.Icon = trimmed;
-        EnsureState(plugin).CustomIcon = trimmed;
-
-        // Also mirror into CustomPlugins if it's a user custom plugin
-        var custom = _settingsService.Settings.CustomPlugins
-            .FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
-        if (custom is not null)
+        lock (_sync)
         {
-            custom.Icon = trimmed;
+            var plugin = _plugins.FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (plugin is null) return;
+
+            var trimmed = string.IsNullOrWhiteSpace(icon) ? "⚡" : icon.Trim();
+            plugin.Icon = trimmed;
+            EnsureState(plugin).CustomIcon = trimmed;
+
+            // Also mirror into CustomPlugins if it's a user custom plugin
+            var custom = _settingsService.Settings.CustomPlugins
+                .FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (custom is not null)
+            {
+                custom.Icon = trimmed;
+            }
+
+            _settingsService.Save();
         }
 
-        _settingsService.Save();
+        PluginsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void ResetCustomIcon(string pluginId)
+    {
+        lock (_sync)
+        {
+            var plugin = _plugins.FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (plugin is null) return;
+
+            var restored = !string.IsNullOrWhiteSpace(plugin.DefaultIcon) ? plugin.DefaultIcon : "symbol:sparkle";
+            plugin.Icon = restored;
+            if (_settingsService.Settings.PluginStates.TryGetValue(plugin.Id, out var state))
+            {
+                state.CustomIcon = null;
+            }
+
+            _settingsService.Save();
+        }
+
+        PluginsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetDisplayMode(string pluginId, ToolbarDisplayMode? displayMode)
+    {
+        lock (_sync)
+        {
+            var plugin = _plugins.FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (plugin is null) return;
+
+            plugin.DisplayMode = displayMode;
+            EnsureState(plugin).DisplayMode = displayMode;
+            _settingsService.Save();
+        }
+
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -135,73 +198,87 @@ public sealed class PluginRegistry
 
     public void MovePluginToIndex(string pluginId, int targetIndex)
     {
-        var ordered = GetAllPlugins().ToList();
-        var index = ordered.FindIndex(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
-        if (index < 0) return;
-
-        var clampedTarget = Math.Clamp(targetIndex, 0, ordered.Count - 1);
-        if (clampedTarget == index) return;
-
-        var item = ordered[index];
-        ordered.RemoveAt(index);
-        ordered.Insert(clampedTarget, item);
-
-        for (var i = 0; i < ordered.Count; i++)
+        lock (_sync)
         {
-            ordered[i].Order = i;
-            EnsureState(ordered[i]).Order = i;
+            var ordered = _plugins.OrderBy(p => p.Order).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var index = ordered.FindIndex(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0) return;
+
+            var clampedTarget = Math.Clamp(targetIndex, 0, ordered.Count - 1);
+            if (clampedTarget == index) return;
+
+            var item = ordered[index];
+            ordered.RemoveAt(index);
+            ordered.Insert(clampedTarget, item);
+
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                ordered[i].Order = i;
+                EnsureState(ordered[i]).Order = i;
+            }
+
+            _settingsService.Save();
         }
 
-        _settingsService.Save();
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SaveOptionValues(string pluginId, IDictionary<string, string> optionValues)
     {
-        var plugin = GetById(pluginId);
-        if (plugin is null) return;
+        lock (_sync)
+        {
+            var plugin = _plugins.FirstOrDefault(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (plugin is null) return;
 
-        var state = EnsureState(plugin);
-        state.OptionValues = new Dictionary<string, string>(optionValues, StringComparer.OrdinalIgnoreCase);
-        _settingsService.Save();
+            var state = EnsureState(plugin);
+            state.OptionValues = new Dictionary<string, string>(optionValues, StringComparer.OrdinalIgnoreCase);
+            _settingsService.Save();
+        }
+
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public PluginManifest AddOrUpdateCustomPlugin(PluginManifest manifest)
     {
-        if (string.IsNullOrWhiteSpace(manifest.Id))
+        string savedId;
+        lock (_sync)
         {
-            manifest.Id = "custom." + Guid.NewGuid().ToString("N")[..8];
-        }
-
-        manifest.Source = PluginSourceType.UserCustom;
-        var settings = _settingsService.Settings;
-        var existingIndex = settings.CustomPlugins.FindIndex(p => p.Id.Equals(manifest.Id, StringComparison.OrdinalIgnoreCase));
-        var copy = manifest.Clone();
-        copy.Source = PluginSourceType.UserCustom;
-
-        if (existingIndex >= 0)
-        {
-            settings.CustomPlugins[existingIndex] = copy;
-            if (settings.PluginStates.TryGetValue(copy.Id, out var existingState))
+            if (string.IsNullOrWhiteSpace(manifest.Id))
             {
-                existingState.CustomIcon = copy.Icon;
+                manifest.Id = "custom." + Guid.NewGuid().ToString("N")[..8];
             }
-        }
-        else
-        {
-            settings.CustomPlugins.Add(copy);
-            settings.PluginStates[copy.Id] = new PluginStateOverride
+
+            manifest.Source = PluginSourceType.UserCustom;
+            var settings = _settingsService.Settings;
+            var existingIndex = settings.CustomPlugins.FindIndex(p => p.Id.Equals(manifest.Id, StringComparison.OrdinalIgnoreCase));
+            var copy = manifest.Clone();
+            copy.Source = PluginSourceType.UserCustom;
+
+            if (existingIndex >= 0)
             {
-                Enabled = true,
-                Order = _plugins.Count,
-                CustomIcon = copy.Icon
-            };
+                settings.CustomPlugins[existingIndex] = copy;
+                if (settings.PluginStates.TryGetValue(copy.Id, out var existingState))
+                {
+                    existingState.CustomIcon = copy.Icon;
+                }
+            }
+            else
+            {
+                settings.CustomPlugins.Add(copy);
+                settings.PluginStates[copy.Id] = new PluginStateOverride
+                {
+                    Enabled = true,
+                    Order = _plugins.Count,
+                    CustomIcon = copy.Icon
+                };
+            }
+
+            savedId = copy.Id;
+            _settingsService.Save();
         }
 
-        _settingsService.Save();
         Reload();
-        return GetById(copy.Id) ?? copy;
+        return GetById(savedId) ?? manifest;
     }
 
     public bool TryImportPopClipSnippet(string snippetText, out PluginManifest? imported, out string? error)
@@ -218,12 +295,59 @@ public sealed class PluginRegistry
 
     public bool RemoveCustomPlugin(string pluginId)
     {
-        var settings = _settingsService.Settings;
-        var removed = settings.CustomPlugins.RemoveAll(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase)) > 0;
-        if (!removed) return false;
+        bool removed;
+        lock (_sync)
+        {
+            var settings = _settingsService.Settings;
+            removed = settings.CustomPlugins.RemoveAll(p => p.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase)) > 0;
+            if (!removed) return false;
 
-        settings.PluginStates.Remove(pluginId);
-        _settingsService.Save();
+            settings.PluginStates.Remove(pluginId);
+            _settingsService.Save();
+        }
+
+        Reload();
+        return true;
+    }
+
+    /// <summary>
+    /// Deletes an installed external plugin file or bundle folder inside userPluginsDir and reloads registry.
+    /// </summary>
+    public bool RemoveInstalledExternalPlugin(string pluginId, string userPluginsDir)
+    {
+        var plugin = GetById(pluginId);
+        if (plugin is null || plugin.Source != PluginSourceType.ExternalFile || string.IsNullOrWhiteSpace(plugin.SourceFilePath))
+        {
+            return false;
+        }
+
+        var fullUserRoot = Path.GetFullPath(userPluginsDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullSourcePath = Path.GetFullPath(plugin.SourceFilePath);
+        if (!fullSourcePath.StartsWith(fullUserRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var relative = fullSourcePath[fullUserRoot.Length..];
+        var firstSegment = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(firstSegment)) return false;
+
+        var targetPath = Path.Combine(userPluginsDir, firstSegment);
+        if (Directory.Exists(targetPath))
+        {
+            Directory.Delete(targetPath, recursive: true);
+        }
+        else if (File.Exists(targetPath))
+        {
+            File.Delete(targetPath);
+        }
+
+        lock (_sync)
+        {
+            _settingsService.Settings.PluginStates.Remove(pluginId);
+            _settingsService.Save();
+        }
+
         Reload();
         return true;
     }

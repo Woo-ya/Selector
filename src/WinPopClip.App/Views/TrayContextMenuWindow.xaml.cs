@@ -5,8 +5,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using WinForms = System.Windows.Forms;
-using Drawing = System.Drawing;
 using WinPopClip.App.Native;
 using WinPopClip.App.Services;
 using WinPopClip.Core.Models;
@@ -84,8 +82,7 @@ public partial class TrayContextMenuWindow : Window
 
             var winW = ActualWidth * dpiX;
             var winH = ActualHeight * dpiY;
-            var screen = WinForms.Screen.FromPoint(new Drawing.Point(screenX, screenY));
-            var work = screen.WorkingArea;
+            var work = Win32Interop.GetWorkAreaForPoint(screenX, screenY);
             var margin = 6 * dpiX;
 
             // Anchor cleanly near the tray icon, preferring above the taskbar

@@ -3,6 +3,7 @@ bin/
 obj/
 dist/
 bin_verify/
+backup/
 *.user
 *.suo
 *.userosscache

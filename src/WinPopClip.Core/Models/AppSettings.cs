@@ -22,7 +22,8 @@ public enum ToolbarTheme
 public enum ToolbarDisplayMode
 {
     IconAndText,
-    IconOnly
+    IconOnly,
+    TextOnly
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -43,11 +44,22 @@ public enum ToolbarSizePreset
     Custom
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ToolbarPopupSpeed
+{
+    Instant,
+    Fast,
+    Standard,
+    Slow,
+    Custom
+}
+
 public sealed class PluginStateOverride
 {
     public bool Enabled { get; set; } = true;
     public int Order { get; set; }
     public string? CustomIcon { get; set; }
+    public ToolbarDisplayMode? DisplayMode { get; set; }
     public Dictionary<string, string> OptionValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -58,9 +70,11 @@ public sealed class AppSettings
     /// <summary>Defaults to 0 so legacy settings files without this field trigger one-time migration on load.</summary>
     public int SettingsSchemaVersion { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool LaunchAtStartup { get; set; } = false;
     public TriggerMode TriggerMode { get; set; } = TriggerMode.AutoOnSelection;
     public bool EnableClipboardFallback { get; set; } = false;
     public bool EnableDoubleClickSelection { get; set; } = true;
+    public bool EnableDialogDoubleClickSummon { get; set; } = true;
     public bool DisableInFullscreen { get; set; } = true;
     public bool ShowGettingStarted { get; set; } = true;
     public int DragThresholdPixels { get; set; } = 8;
@@ -73,6 +87,8 @@ public sealed class AppSettings
     public ToolbarSizePreset ToolbarSizePreset { get; set; } = ToolbarSizePreset.Auto;
     public double ToolbarCustomWidth { get; set; } = 460;
     public double ToolbarCustomHeight { get; set; } = 46;
+    public ToolbarPopupSpeed ToolbarPopupSpeed { get; set; } = ToolbarPopupSpeed.Fast;
+    public int ToolbarPopupDurationMs { get; set; } = ThemeResolver.FastPopupDurationMs;
 
     /// <summary>Backward-compatible convenience property synced with DisplayMode.</summary>
     [JsonIgnore]

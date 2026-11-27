@@ -315,7 +315,7 @@
                             <!-- Subtle Footer Version Line -->
                             <DockPanel Grid.Row="3" Margin="2,14,2,0" LastChildFill="False">
                                 <TextBlock DockPanel.Dock="Left" Text="Selector · 轻盈的 Windows 划词浮窗工具" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
-                                <TextBlock DockPanel.Dock="Right" Text="v1.01" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="v1.1" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
                             </DockPanel>
                         </Grid>
                     </ScrollViewer>
@@ -363,6 +363,10 @@
                                             <CheckBox x:Name="GeneralMasterToggle" Style="{StaticResource ToggleSwitchStyle}" Checked="OnMasterEnabledChanged" Unchecked="OnMasterEnabledChanged" />
                                         </controls:SettingsCard>
 
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Refresh}" Header="开机自动启动" Description="登录 Windows 时自动在系统托盘静默启动 Selector，不弹出主窗口">
+                                            <CheckBox x:Name="LaunchAtStartupCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnLaunchAtStartupChanged" Unchecked="OnLaunchAtStartupChanged" />
+                                        </controls:SettingsCard>
+
                                         <controls:SettingsCard Icon="{StaticResource Glyph.Mouse}" Header="默认触发方式" Description="鼠标拖拽划词最贴近 macOS PopClip 体验；也可改为按住修饰键防误触">
                                             <ListBox x:Name="TriggerModeSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnTriggerSegmentedChanged">
                                                 <ListBoxItem Tag="AutoOnSelection" Content="鼠标划词" />
@@ -375,8 +379,12 @@
                                             <CheckBox x:Name="DoubleClickCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
                                         </controls:SettingsCard>
 
-                                        <controls:SettingsCard Icon="{StaticResource Glyph.Paste}" Header="剪贴板兼容回退（可选）" Description="默认关闭以确保划词绝不触发复制；仅在不支持 UIA 的旧版应用中按需开启（开启后会完整备份并还原原剪贴板）">
-                                            <CheckBox x:Name="ClipboardFallbackCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Mouse}" Header="对话框双击呼出浮窗" Description="在空白输入框或对话框中双击鼠标左键即可呼出浮窗（如快速粘贴，与 PopClip 一致）">
+                                            <CheckBox x:Name="DialogDoubleClickCheck" Style="{StaticResource ToggleSwitchStyle}" Checked="OnQuickBoolSettingChanged" Unchecked="OnQuickBoolSettingChanged" />
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Paste}" Header="剪贴板兼容回退（已停用）" Description="划词捕获链路永不自动写入剪贴板，也不干扰外部剪贴板提醒；微信/QQ 采用豆包式延迟取词，仅在点击动作时按需取词">
+                                            <CheckBox x:Name="ClipboardFallbackCheck" Style="{StaticResource ToggleSwitchStyle}" IsEnabled="False" IsChecked="False" />
                                         </controls:SettingsCard>
 
                                         <controls:SettingsCard Icon="{StaticResource Glyph.Shield}" Header="独占全屏时自动禁用" Description="在全屏游戏或演示模式下暂停弹出（不影响正常最大化的浏览器）">
@@ -450,7 +458,13 @@
                                                     </Ellipse.Fill>
                                                 </Ellipse>
 
-                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <StackPanel x:Name="PreviewPillContainer" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                    <StackPanel.RenderTransform>
+                                                        <TransformGroup>
+                                                            <ScaleTransform x:Name="PreviewPopScale" ScaleX="1" ScaleY="1" />
+                                                            <TranslateTransform x:Name="PreviewPopSlide" Y="0" />
+                                                        </TransformGroup>
+                                                    </StackPanel.RenderTransform>
                                                     <Border x:Name="PreviewPillBorder" CornerRadius="14" BorderThickness="1.15">
                                                         <Border.Effect>
                                                             <DropShadowEffect x:Name="PreviewPillShadow" Color="#000000" BlurRadius="22" ShadowDepth="6" Opacity="0.32" />
@@ -502,7 +516,7 @@
                                                                         <ColumnDefinition Width="*" />
                                                                         <ColumnDefinition Width="*" />
                                                                     </Grid.ColumnDefinitions>
-                                                                    <Border Grid.Column="0" Background="#F9F7F1" />
+                                                                    <Border Grid.Column="0" Background="#F6F6F6" />
                                                                     <Border Grid.Column="1" Background="#202020" />
                                                                     <Border Grid.ColumnSpan="2" Height="16" Width="62" CornerRadius="6" Background="#D82B2D36" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                                                 </Grid>
@@ -514,7 +528,7 @@
                                                     <!-- Light mini preview -->
                                                     <ListBoxItem Tag="Light">
                                                         <StackPanel Width="108">
-                                                            <Border Height="60" CornerRadius="6" Background="#F9F7F1" BorderBrush="#24000000" BorderThickness="1">
+                                                            <Border Height="60" CornerRadius="6" Background="#F6F6F6" BorderBrush="#24000000" BorderThickness="1">
                                                                 <Border Height="16" Width="64" CornerRadius="6" Background="#FFFFFF" BorderBrush="#1A000000" BorderThickness="1" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                                             </Border>
                                                             <TextBlock Text="浅色模式" FontSize="12.5" HorizontalAlignment="Center" Margin="0,6,0,0" />
@@ -535,7 +549,7 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <TextBlock Text="浮窗材质、圆角与尺寸" Style="{StaticResource SectionHeaderTextStyle}" />
+                                        <TextBlock Text="浮窗材质、尺寸与动效" Style="{StaticResource SectionHeaderTextStyle}" />
 
                                         <controls:SettingsCard Icon="{StaticResource Glyph.Brush}" Header="浮窗材质" Description="选择划词浮窗的表面视觉材质，立即生效">
                                             <ListBox x:Name="MaterialSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnMaterialSegmentedChanged">
@@ -569,38 +583,135 @@
                                             </StackPanel>
                                         </controls:SettingsCard>
 
-                                        <controls:SettingsCard Icon="{StaticResource Glyph.ViewAll}" Header="按钮图标模式" Description="在简洁纯图标与图标+文字两种形态之间切换">
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.ViewAll}" Header="浮窗默认展示形式" Description="全局切换纯图标、仅名称或图标+名称（也可在「插件扩展」中为单个插件独立配置）">
                                             <ListBox x:Name="DisplayModeSegmented" Style="{StaticResource SegmentedStyle}" SelectionChanged="OnDisplayModeSegmentedChanged">
-                                                <ListBoxItem Tag="IconAndText" Content="图标 + 文字" />
-                                                <ListBoxItem Tag="IconOnly" Content="纯图标" />
+                                                <ListBoxItem Tag="IconOnly" Content="仅图标" />
+                                                <ListBoxItem Tag="TextOnly" Content="仅名称" />
+                                                <ListBoxItem Tag="IconAndText" Content="图标 + 名称" />
                                             </ListBox>
+                                        </controls:SettingsCard>
+
+                                        <controls:SettingsCard Icon="{StaticResource Glyph.Lightning}" Header="浮窗弹出速度" Description="选择弹出动画档位或微调过渡时长（0 ~ 360 ms），立即生效并在上方实时预览；双击数值恢复默认">
+                                            <StackPanel HorizontalAlignment="Right">
+                                                <ListBox x:Name="PopupSpeedSegmented"
+                                                         Style="{StaticResource SegmentedStyle}"
+                                                         HorizontalAlignment="Right"
+                                                         SelectionChanged="OnPopupSpeedSegmentedChanged">
+                                                    <ListBoxItem Tag="Instant" Content="无动画" />
+                                                    <ListBoxItem Tag="Fast" Content="极速" />
+                                                    <ListBoxItem Tag="Standard" Content="标准" />
+                                                    <ListBoxItem Tag="Slow" Content="柔和" />
+                                                    <ListBoxItem Tag="Custom" Content="自定义" />
+                                                </ListBox>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0" VerticalAlignment="Center">
+                                                    <Slider x:Name="PopupDurationSlider"
+                                                            Width="180"
+                                                            Minimum="0"
+                                                            Maximum="360"
+                                                            TickFrequency="10"
+                                                            IsSnapToTickEnabled="True"
+                                                            VerticalAlignment="Center"
+                                                            ValueChanged="OnPopupDurationChanged"
+                                                            PreviewMouseLeftButtonUp="OnPopupDurationSliderMouseUp" />
+                                                    <TextBlock x:Name="PopupDurationValueText"
+                                                               Text="110 ms"
+                                                               Width="58"
+                                                               TextAlignment="Right"
+                                                               FontSize="12.5"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               Cursor="Hand"
+                                                               ToolTip="双击恢复默认速度 (极速 110 ms)"
+                                                               MouseLeftButtonDown="OnPopupDurationValueMouseDown" />
+                                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                                            Content="预览"
+                                                            MinHeight="24"
+                                                            Padding="9,2"
+                                                            FontSize="12"
+                                                            Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            ToolTip="在上方预览区重放当前弹出动画"
+                                                            Click="OnReplayPopupPreviewClick" />
+                                                </StackPanel>
+                                            </StackPanel>
                                         </controls:SettingsCard>
                                     </StackPanel>
                                 </ScrollViewer>
 
                                 <!-- ─── SUBPAGE 3: PLUGINS & POPCLIP EXTENSIONS ─── -->
-                                <Grid x:Name="PagePlugins" Visibility="Collapsed" Margin="26,14,26,20">
+                                <Grid x:Name="PagePlugins"
+                                      Visibility="Collapsed"
+                                      Margin="26,14,26,20"
+                                      AllowDrop="True"
+                                      PreviewDragEnter="OnPluginsPageDragEnter"
+                                      PreviewDragOver="OnPluginsPageDragOver"
+                                      PreviewDragLeave="OnPluginsPageDragLeave"
+                                      PreviewDrop="OnPluginsPageDrop">
                                     <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
 
-                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
                                         <Button Style="{StaticResource BackButtonStyle}" Click="OnBackToOverviewClick" />
                                         <TextBlock Text="插件扩展" Style="{StaticResource TitleTextStyle}" />
                                     </StackPanel>
 
-                                    <WrapPanel Grid.Row="1" Margin="0,0,0,12">
-                                        <Button Style="{StaticResource AccentButtonStyle}" Content="+ 新增插件" Margin="0,0,8,6" Click="OnAddPluginClick" />
-                                        <Button Content="导入 PopClip Snippet" Margin="0,0,8,6" Click="OnImportPopClipClick" />
+                                    <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+                                        <Button Style="{StaticResource AccentButtonStyle}" Content="+ 新增插件" Margin="0,0,6,6" Click="OnAddPluginClick" />
+                                        <Button Content="导入 PopClip Snippet" Margin="0,0,6,6" Click="OnImportPopClipClick" />
+                                        <Button Content="PopClip 扩展库 ↗" Margin="0,0,6,6" ToolTip="打开 PopClip 官方扩展目录 (popclip.app/extensions)" Click="OnOpenPopClipExtensionsClick" />
                                         <Button Content="编辑" Margin="0,0,6,6" Click="OnEditPluginClick" />
-                                        <Button Content="删除" Margin="0,0,8,6" Click="OnDeletePluginClick" />
+                                        <Button Content="删除" Margin="0,0,6,6" Click="OnDeletePluginClick" />
                                         <Button Content="重载 plugins/" Margin="0,0,6,6" Click="OnReloadPluginsClick" />
                                         <Button Content="打开插件目录" Margin="0,0,0,6" Click="OnOpenPluginsFolderClick" />
                                     </WrapPanel>
 
-                                    <Grid Grid.Row="2">
+                                    <!-- Drag-and-Drop Extension Install Bar with Idle / Loading / Success / Error Feedback -->
+                                    <Border x:Name="PluginDropBar"
+                                            Grid.Row="2"
+                                            Background="{DynamicResource CardBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12,8"
+                                            Margin="0,0,0,10">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse x:Name="PluginDropStatusDot"
+                                                     Grid.Column="0"
+                                                     Width="7"
+                                                     Height="7"
+                                                     Margin="0,1,8,0"
+                                                     VerticalAlignment="Center"
+                                                     Fill="{DynamicResource AccentBrush}" />
+                                            <TextBlock x:Name="PluginDropStatusText"
+                                                       Grid.Column="1"
+                                                       Text="将下载的 .popclipextz / .popclipext / .json / .js / .popcliptxt 直接拖入此处即可安装并使用"
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                                       VerticalAlignment="Center" />
+                                            <Button x:Name="ChoosePluginFileBtn"
+                                                    Grid.Column="2"
+                                                    Content="选择文件安装..."
+                                                    MinHeight="26"
+                                                    Padding="10,3"
+                                                    FontSize="12"
+                                                    Margin="12,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Click="OnInstallPluginFilesClick" />
+                                        </Grid>
+                                    </Border>
+
+                                    <Grid Grid.Row="3">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="1.45*" />
                                             <ColumnDefinition Width="14" />
@@ -610,6 +721,7 @@
                                         <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="6">
                                             <ListBox x:Name="PluginsListBox"
                                                      Background="Transparent"
+                                                     Foreground="{DynamicResource TextPrimaryBrush}"
                                                      BorderThickness="0"
                                                      SelectionChanged="OnPluginSelectionChanged"
                                                      HorizontalContentAlignment="Stretch"
@@ -623,6 +735,7 @@
                                                 <ListBox.ItemContainerStyle>
                                                     <Style TargetType="ListBoxItem">
                                                         <Setter Property="Background" Value="Transparent" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                                                         <Setter Property="Padding" Value="0" />
                                                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                                         <Setter Property="Template">
@@ -697,6 +810,7 @@
 
                                                                 <StackPanel Grid.Column="3" Margin="10,0,8,0" VerticalAlignment="Center">
                                                                     <TextBlock Text="{Binding Name}"
+                                                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                                                FontWeight="SemiBold"
                                                                                FontSize="13.5"
                                                                                TextTrimming="CharacterEllipsis" />
@@ -764,11 +878,52 @@
                                                     <TextBlock x:Name="DetailConditionText" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="18" />
 
                                                     <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="0,0,0,12" />
-                                                    <TextBlock Text="图标样式（单色矢量 / PopClip 徽章）" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,8" />
+                                                    <TextBlock Text="浮窗展示形式（单个插件独立配置）" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,8" />
+                                                    <ListBox x:Name="PluginDisplayModeSegmented"
+                                                             Style="{StaticResource SegmentedStyle}"
+                                                             Margin="0,0,0,12"
+                                                             HorizontalAlignment="Left"
+                                                             SelectionChanged="OnPluginDisplayModeChanged">
+                                                        <ListBoxItem Tag="FollowGlobal" Content="跟随全局" />
+                                                        <ListBoxItem Tag="IconOnly" Content="仅图标" />
+                                                        <ListBoxItem Tag="TextOnly" Content="仅名称" />
+                                                        <ListBoxItem Tag="IconAndText" Content="图标+名称" />
+                                                    </ListBox>
+
+                                                    <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="0,0,0,12" />
+                                                    <TextBlock Text="浮窗图标（图片 / SVG / 矢量 / 徽章 / Emoji）" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,8" />
                                                     <DockPanel Margin="0,0,0,8">
                                                         <Button x:Name="SaveIconButton" Style="{StaticResource AccentButtonStyle}" DockPanel.Dock="Right" Content="应用" Padding="12,4" Margin="6,0,0,0" Click="OnSaveIconClick" />
-                                                        <TextBox x:Name="PluginIconBox" />
+                                                        <TextBox x:Name="PluginIconBox" ToolTip="支持本地图片 file:路径、矢量 symbol:search、徽章 square filled AI 或任意 Emoji" />
                                                     </DockPanel>
+                                                    <WrapPanel Margin="0,0,0,10">
+                                                        <Button x:Name="BrowseIconButton"
+                                                                Content="选择图片 / SVG..."
+                                                                MinHeight="26"
+                                                                Padding="10,3"
+                                                                FontSize="12"
+                                                                Margin="0,0,6,6"
+                                                                ToolTip="从本地选择 PNG / SVG / ICO / JPG / WebP 作为该动作的浮窗图标"
+                                                                Click="OnBrowsePluginIconClick" />
+                                                        <Button x:Name="ToggleIconColorModeButton"
+                                                                Content="保留原色"
+                                                                MinHeight="26"
+                                                                Padding="10,3"
+                                                                FontSize="12"
+                                                                Margin="0,0,6,6"
+                                                                Visibility="Collapsed"
+                                                                ToolTip="在「自适应深浅色单色」与「保留图片原始色彩」之间切换"
+                                                                Click="OnToggleIconColorModeClick" />
+                                                        <Button x:Name="ResetIconButton"
+                                                                Style="{StaticResource SubtleButtonStyle}"
+                                                                Content="恢复默认"
+                                                                MinHeight="26"
+                                                                Padding="10,3"
+                                                                FontSize="12"
+                                                                Margin="0,0,0,6"
+                                                                ToolTip="恢复该插件自带的默认图标"
+                                                                Click="OnResetPluginIconClick" />
+                                                    </WrapPanel>
                                                     <WrapPanel x:Name="InspectorIconPresets" Margin="0,0,0,12" />
 
                                                     <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="0,0,0,12" />
@@ -779,6 +934,38 @@
                                             </ScrollViewer>
                                         </Border>
                                     </Grid>
+
+                                    <!-- Translucent Drag-Over Drop Target Overlay -->
+                                    <Border x:Name="PluginDropOverlay"
+                                            Grid.RowSpan="4"
+                                            Visibility="Collapsed"
+                                            IsHitTestVisible="False"
+                                            Background="{DynamicResource FlyoutBrush}"
+                                            Opacity="0.95"
+                                            BorderBrush="{DynamicResource AccentBrush}"
+                                            BorderThickness="2"
+                                            CornerRadius="10">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path Data="M 12,3 V 15 M 7,10 L 12,15 L 17,10 M 4,19 H 20"
+                                                  Width="32" Height="32" Stretch="Uniform"
+                                                  Stroke="{DynamicResource AccentBrush}"
+                                                  StrokeThickness="2"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"
+                                                  StrokeLineJoin="Round"
+                                                  HorizontalAlignment="Center"
+                                                  Margin="0,0,0,10" />
+                                            <TextBlock Text="松开鼠标即可安装 PopClip / Selector 扩展"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="支持 .popclipextz · .popclipext · .zip · .json · .js · .popcliptxt · 或直接拖入 #popclip 文本"
+                                                       FontSize="12.5"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       Margin="0,6,0,0"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
                                 </Grid>
 
                                 <!-- ─── SUBPAGE 4: PLAYGROUND & LIVE DIAGNOSTICS ─── -->

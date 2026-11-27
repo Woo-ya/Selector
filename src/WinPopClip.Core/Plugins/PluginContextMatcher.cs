@@ -25,6 +25,10 @@ public sealed partial class PluginContextMatcher
     [GeneratedRegex(@"^(?:www\.)?[a-zA-Z0-9\-]+(?:\.[a-zA-Z]{2,})+(?:/[^\s]*)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex BareDomainRegex();
 
+    // Matches pure length-cap regexes used by generic PopClip extensions (e.g. Instant Translate's "(?s)^.{1,5000}$").
+    [GeneratedRegex(@"^(?:\(\?[a-z]+\))?\^?(?:\.|\[\\s\\S\])\{(?:\d+)?,\d*\}\$?$", RegexOptions.Compiled)]
+    private static partial Regex GenericLengthCapRegex();
+
     public SelectionContext EnrichContext(SelectionContext context)
     {
         var urls = new List<string>();
@@ -52,6 +56,9 @@ public sealed partial class PluginContextMatcher
             WindowHandle = context.WindowHandle,
             IsEditable = context.IsEditable,
             IsPasswordField = context.IsPasswordField,
+            IsEmptyInputSummon = context.IsEmptyInputSummon,
+            IsDeferredCapture = context.IsDeferredCapture,
+            HasClipboardText = context.HasClipboardText,
             Source = context.Source,
             SelectionBounds = context.SelectionBounds,
             AnchorPoint = context.AnchorPoint,
@@ -66,7 +73,14 @@ public sealed partial class PluginContextMatcher
         SelectionContext rawContext,
         int maxCount = 20)
     {
-        if (rawContext.IsPasswordField || string.IsNullOrWhiteSpace(rawContext.Text))
+        if (rawContext.IsPasswordField)
+        {
+            return Array.Empty<MatchedPlugin>();
+        }
+
+        if (string.IsNullOrWhiteSpace(rawContext.Text) &&
+            !rawContext.IsDeferredCapture &&
+            (!rawContext.IsEmptyInputSummon || !rawContext.IsEditable))
         {
             return Array.Empty<MatchedPlugin>();
         }
@@ -109,12 +123,48 @@ public sealed partial class PluginContextMatcher
             return false;
         }
 
+        // Doubao-style deferred capture mode (text is materialized only when the user clicks an action,
+        // avoiding Ctrl+C on selection): allow generic text/editable actions (including Web Search with MaxLength
+        // and Translate extensions with pure length-cap regexes like "(?s)^.{1,5000}$") while skipping
+        // content-specific regex/URL/email/number predicates.
+        if (context.IsDeferredCapture && string.IsNullOrWhiteSpace(context.Text))
+        {
+            if (!string.IsNullOrWhiteSpace(plugin.Regex) && !GenericLengthCapRegex().IsMatch(plugin.Regex.Trim()))
+            {
+                return false;
+            }
+
+            foreach (var req in plugin.Requirements)
+            {
+                var normalized = req.Trim().ToLowerInvariant();
+                var passed = normalized switch
+                {
+                    "" or "text" => true,
+                    "editable" => context.IsEditable,
+                    "paste" => context.IsEditable,
+                    "url" or "email" or "number" or "multiline" or "singleline" => false,
+                    _ => true
+                };
+                if (!passed) return false;
+            }
+
+            matched = new MatchedPlugin(plugin);
+            return true;
+        }
+
         // Length checks
         var len = context.TrimmedText.Length;
         if (plugin.MinLength.HasValue && len < plugin.MinLength.Value)
             return false;
         if (plugin.MaxLength.HasValue && len > plugin.MaxLength.Value)
             return false;
+
+        // When summoned in an empty editable dialog/input box, only plugins explicitly declaring
+        // editable/paste (without requiring text/url/email/number) may match.
+        if (context.IsEmptyInputSummon && string.IsNullOrWhiteSpace(context.Text) && plugin.Requirements.Count == 0)
+        {
+            return false;
+        }
 
         // Requirements checks
         foreach (var req in plugin.Requirements)
@@ -125,10 +175,11 @@ public sealed partial class PluginContextMatcher
                 "" or "text" => !string.IsNullOrWhiteSpace(context.Text),
                 "url" => context.DetectedUrls.Count > 0,
                 "email" => context.DetectedEmails.Count > 0,
-                "number" => NumberRegex().IsMatch(context.TrimmedText),
-                "editable" or "paste" => context.IsEditable,
-                "multiline" => context.Text.Contains('\n'),
-                "singleline" => !context.Text.Contains('\n'),
+                "number" => !string.IsNullOrWhiteSpace(context.Text) && NumberRegex().IsMatch(context.TrimmedText),
+                "editable" => context.IsEditable,
+                "paste" => context.IsEditable && (!context.IsEmptyInputSummon || context.HasClipboardText),
+                "multiline" => !string.IsNullOrWhiteSpace(context.Text) && context.Text.Contains('\n'),
+                "singleline" => !string.IsNullOrWhiteSpace(context.Text) && !context.Text.Contains('\n'),
                 _ => true
             };
 

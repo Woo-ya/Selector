@@ -34,6 +34,10 @@ public sealed class ThemeService : IDisposable
     public ToolbarSizePreset CurrentSizePreset => _settingsService.Settings.ToolbarSizePreset;
     public double CurrentCustomWidth => ThemeResolver.ClampCustomWidth(_settingsService.Settings.ToolbarCustomWidth);
     public double CurrentCustomHeight => ThemeResolver.ClampCustomHeight(_settingsService.Settings.ToolbarCustomHeight);
+    public ToolbarPopupSpeed CurrentPopupSpeed => _settingsService.Settings.ToolbarPopupSpeed;
+    public int CurrentPopupDurationMs => ThemeResolver.ResolvePopupDurationMs(
+        _settingsService.Settings.ToolbarPopupSpeed,
+        _settingsService.Settings.ToolbarPopupDurationMs);
 
     public event EventHandler<ThemeChangedEventArgs>? ThemeChanged;
     public event EventHandler? ToolbarAppearanceChanged;
@@ -117,6 +121,28 @@ public sealed class ThemeService : IDisposable
         _settingsService.Settings.ToolbarCustomWidth = clampedW;
         _settingsService.Settings.ToolbarCustomHeight = clampedH;
         _settingsService.Save();
+        ToolbarAppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetToolbarPopupSpeed(ToolbarPopupSpeed speed, int? customDurationMs = null)
+    {
+        var resolvedMs = ThemeResolver.ResolvePopupDurationMs(
+            speed,
+            customDurationMs ?? _settingsService.Settings.ToolbarPopupDurationMs);
+        var normalizedSpeed = speed == ToolbarPopupSpeed.Custom
+            ? ThemeResolver.ResolvePopupSpeedPreset(resolvedMs)
+            : speed;
+
+        if (_settingsService.Settings.ToolbarPopupSpeed == normalizedSpeed &&
+            _settingsService.Settings.ToolbarPopupDurationMs == resolvedMs)
+        {
+            return;
+        }
+
+        _settingsService.Settings.ToolbarPopupSpeed = normalizedSpeed;
+        _settingsService.Settings.ToolbarPopupDurationMs = resolvedMs;
+        _settingsService.Save();
+        _diagnostics?.Write($"浮窗弹出速度切换：{ThemeResolver.GetPopupSpeedDisplayName(normalizedSpeed)} ({resolvedMs} ms)");
         ToolbarAppearanceChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -229,14 +255,14 @@ public sealed class ThemeService : IDisposable
 
         void SetArgb(string key, byte a, byte r, byte g, byte b) => SetBrush(key, Color.FromArgb(a, r, g, b));
 
-        // Selector's signature Indigo accent adapted for Light/Dark contrast (aligned with DropShelf's accent model)
-        var accent = isDark ? Color.FromRgb(129, 140, 248) : Color.FromRgb(79, 70, 229);
+        // Selector's signature Indigo accent adapted for crisp white text contrast in both Light and Dark modes
+        var accent = isDark ? Color.FromRgb(99, 102, 241) : Color.FromRgb(79, 70, 229);
         var accentHover = Color.FromArgb(0xE6, accent.R, accent.G, accent.B);
         var accentPressed = Color.FromArgb(0xCC, accent.R, accent.G, accent.B);
         var accentText = isDark ? Color.FromRgb(165, 180, 252) : Color.FromRgb(55, 48, 163);
         var accentSubtle = Color.FromArgb(isDark ? (byte)0x2E : (byte)0x1F, accent.R, accent.G, accent.B);
         var accentFaint = Color.FromArgb(isDark ? (byte)0x18 : (byte)0x10, accent.R, accent.G, accent.B);
-        var textOnAccent = isDark ? Color.FromArgb(0xE8, 0x0F, 0x11, 0x17) : Colors.White;
+        var textOnAccent = Colors.White;
 
         SetBrush("AccentBrush", accent);
         SetBrush("AccentHoverBrush", accentHover);
@@ -306,18 +332,18 @@ public sealed class ThemeService : IDisposable
         }
         else
         {
-            // DropShelf Light palette: signature warm porcelain paper (#F9F7F1) with translucent white cards
-            SetArgb("WindowBackgroundBrush", 0xFF, 0xF9, 0xF7, 0xF1);
-            SetArgb("AppBgBrush", 0xFF, 0xF9, 0xF7, 0xF1);
-            SetArgb("LayerBrush", 0xCC, 0xFF, 0xFD, 0xF8);
-            SetArgb("SurfaceBrush", 0xFF, 0xFD, 0xFC, 0xF8);
+            // Clean cool-gray Light palette (#F6F6F6) with crisp white cards across Settings, Flyouts, and Tray Menu
+            SetArgb("WindowBackgroundBrush", 0xFF, 0xF6, 0xF6, 0xF6);
+            SetArgb("AppBgBrush", 0xFF, 0xF6, 0xF6, 0xF6);
+            SetArgb("LayerBrush", 0xFF, 0xF6, 0xF6, 0xF6);
+            SetArgb("SurfaceBrush", 0xFF, 0xF6, 0xF6, 0xF6);
             SetArgb("SurfaceAltBrush", 0x08, 0x00, 0x00, 0x00);
-            SetArgb("CardBrush", 0xB3, 0xFF, 0xFF, 0xFF);
-            SetArgb("CardHoverBrush", 0xE6, 0xFF, 0xFF, 0xFF);
+            SetArgb("CardBrush", 0xE6, 0xFF, 0xFF, 0xFF);
+            SetArgb("CardHoverBrush", 0xFF, 0xFF, 0xFF, 0xFF);
             SetArgb("CardBorderBrush", 0x14, 0x00, 0x00, 0x00);
-            SetArgb("ControlBrush", 0xB3, 0xFF, 0xFF, 0xFF);
-            SetArgb("ControlHoverBrush", 0x80, 0xF9, 0xF9, 0xF9);
-            SetArgb("ControlPressedBrush", 0x4D, 0xF9, 0xF9, 0xF9);
+            SetArgb("ControlBrush", 0xCC, 0xFF, 0xFF, 0xFF);
+            SetArgb("ControlHoverBrush", 0x99, 0xF6, 0xF6, 0xF6);
+            SetArgb("ControlPressedBrush", 0x66, 0xEF, 0xEF, 0xEF);
             SetArgb("ControlBorderBrush", 0x1F, 0x00, 0x00, 0x00);
             SetArgb("ControlStrongBorderBrush", 0x72, 0x00, 0x00, 0x00);
             SetArgb("ControlAltBrush", 0x07, 0x00, 0x00, 0x00);
@@ -325,7 +351,7 @@ public sealed class ThemeService : IDisposable
             SetArgb("SubtlePressedBrush", 0x06, 0x00, 0x00, 0x00);
             SetArgb("SubtleSelectedBrush", 0x0D, 0x00, 0x00, 0x00);
             SetArgb("DividerBrush", 0x0F, 0x00, 0x00, 0x00);
-            SetArgb("FlyoutBrush", 0xFF, 0xFD, 0xFC, 0xF8);
+            SetArgb("FlyoutBrush", 0xFF, 0xF6, 0xF6, 0xF6);
             SetArgb("FlyoutBorderBrush", 0x1A, 0x00, 0x00, 0x00);
             SetArgb("TextPrimaryBrush", 0xE4, 0x00, 0x00, 0x00);
             SetArgb("TextSecondaryBrush", 0x9E, 0x00, 0x00, 0x00);

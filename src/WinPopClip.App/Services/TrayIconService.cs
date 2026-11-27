@@ -1,7 +1,7 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
-using WinForms = System.Windows.Forms;
-using Drawing = System.Drawing;
+using System.Windows.Interop;
 using WinPopClip.App.Native;
 using WinPopClip.App.Views;
 using WinPopClip.Core.Models;
@@ -10,14 +10,24 @@ using WinPopClip.Core.Storage;
 namespace WinPopClip.App.Services;
 
 /// <summary>
-/// Manages the Windows system tray icon and its themed WPF context menu GUI.
+/// Pure Win32 Shell_NotifyIconW system tray service (zero WinForms / System.Drawing overhead)
+/// paired with Selector's themed WPF TrayContextMenuWindow.
 /// </summary>
 public sealed class TrayIconService : IDisposable
 {
+    private const uint TrayIconId = 1;
+    private const int WmTrayIcon = Win32Interop.WM_APP + 1;
+
     private readonly SettingsService _settingsService;
     private readonly ThemeService _themeService;
-    private readonly WinForms.NotifyIcon _notifyIcon;
     private readonly TrayContextMenuWindow _contextMenu;
+    private readonly HwndSource _messageWindow;
+    private readonly uint _taskbarCreatedMsg;
+
+    private IntPtr _hIcon;
+    private bool _ownsIcon;
+    private bool _iconAdded;
+    private bool _disposed;
 
     public event EventHandler? OpenSettingsRequested;
     public event EventHandler? ReloadPluginsRequested;
@@ -33,40 +43,55 @@ public sealed class TrayIconService : IDisposable
         _contextMenu.ReloadPluginsRequested += (_, _) => ReloadPluginsRequested?.Invoke(this, EventArgs.Empty);
         _contextMenu.ExitRequested += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
-        _notifyIcon = new WinForms.NotifyIcon
-        {
-            Icon = LoadAppIcon(),
-            Visible = true
-        };
+        _taskbarCreatedMsg = Win32Interop.RegisterWindowMessageW("TaskbarCreated");
 
-        _notifyIcon.MouseUp += OnNotifyIconMouseUp;
-        _notifyIcon.MouseDoubleClick += (_, e) =>
+        var parameters = new HwndSourceParameters("SelectorTrayMessageWindow")
         {
-            if (e.Button == WinForms.MouseButtons.Left)
-            {
-                Application.Current?.Dispatcher.InvokeAsync(() =>
-                    OpenSettingsRequested?.Invoke(this, EventArgs.Empty));
-            }
+            Width = 0,
+            Height = 0,
+            PositionX = 0,
+            PositionY = 0,
+            WindowStyle = 0
         };
+        _messageWindow = new HwndSource(parameters);
+        _messageWindow.AddHook(WndProc);
+
+        (_hIcon, _ownsIcon) = LoadAppIconHandle();
+        AddOrUpdateTrayIcon(add: true);
 
         _settingsService.SettingsChanged += OnStateChanged;
         _themeService.ThemeChanged += OnThemeChanged;
         SyncState();
     }
 
-    private void OnNotifyIconMouseUp(object? sender, WinForms.MouseEventArgs e)
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (e.Button == WinForms.MouseButtons.Right)
+        if (msg == WmTrayIcon)
         {
-            var pt = Win32Interop.GetCursorPos(out var cursor)
-                ? cursor
-                : new Win32Interop.POINT { X = WinForms.Cursor.Position.X, Y = WinForms.Cursor.Position.Y };
-
-            Application.Current?.Dispatcher.InvokeAsync(() =>
+            var mouseMsg = lParam.ToInt32() & 0xFFFF;
+            if (mouseMsg == Win32Interop.WM_RBUTTONUP)
             {
-                _contextMenu.ShowNearCursor(pt.X, pt.Y);
-            });
+                if (Win32Interop.GetCursorPos(out var cursor))
+                {
+                    Application.Current?.Dispatcher.InvokeAsync(() =>
+                        _contextMenu.ShowNearCursor(cursor.X, cursor.Y));
+                }
+                handled = true;
+            }
+            else if (mouseMsg == Win32Interop.WM_LBUTTONDBLCLK)
+            {
+                Application.Current?.Dispatcher.InvokeAsync(() =>
+                    OpenSettingsRequested?.Invoke(this, EventArgs.Empty));
+                handled = true;
+            }
         }
+        else if (_taskbarCreatedMsg != 0 && msg == (int)_taskbarCreatedMsg)
+        {
+            // Automatically restore tray icon if Explorer restarts
+            AddOrUpdateTrayIcon(add: true);
+        }
+
+        return IntPtr.Zero;
     }
 
     private void OnStateChanged(object? sender, EventArgs e) => SyncState();
@@ -75,67 +100,118 @@ public sealed class TrayIconService : IDisposable
 
     public void SyncState()
     {
-        UpdateTooltip();
+        if (_disposed) return;
+        AddOrUpdateTrayIcon(add: !_iconAdded);
         Application.Current?.Dispatcher.InvokeAsync(() => _contextMenu.SyncState());
     }
 
     public void ShowBalloon(string title, string text)
     {
-        _notifyIcon.ShowBalloonTip(2500, title, text, WinForms.ToolTipIcon.Info);
+        if (_disposed || !_iconAdded) return;
+
+        var data = CreateBaseData();
+        data.uFlags = Win32Interop.NIF_INFO;
+        data.szInfoTitle = Truncate(title, 63);
+        data.szInfo = Truncate(text, 255);
+        data.dwInfoFlags = Win32Interop.NIIF_INFO;
+        Win32Interop.Shell_NotifyIconW(Win32Interop.NIM_MODIFY, ref data);
     }
 
-    private void UpdateTooltip()
+    private void AddOrUpdateTrayIcon(bool add)
     {
+        if (_disposed || _messageWindow.Handle == IntPtr.Zero) return;
+
         var state = _settingsService.Settings.Enabled ? "运行中" : "已暂停";
         var themeText = ThemeResolver.GetDisplayName(_themeService.CurrentPreference);
-        _notifyIcon.Text = $"Selector ({state} · {themeText})";
+        var tip = Truncate($"Selector ({state} · {themeText})", 127);
+
+        var data = CreateBaseData();
+        data.uFlags = Win32Interop.NIF_MESSAGE | Win32Interop.NIF_ICON | Win32Interop.NIF_TIP;
+        data.uCallbackMessage = WmTrayIcon;
+        data.hIcon = _hIcon;
+        data.szTip = tip;
+
+        var ok = Win32Interop.Shell_NotifyIconW(add ? Win32Interop.NIM_ADD : Win32Interop.NIM_MODIFY, ref data);
+        if (add && ok)
+        {
+            _iconAdded = true;
+        }
     }
 
-    private static Drawing.Icon LoadAppIcon()
+    private Win32Interop.NOTIFYICONDATAW CreateBaseData() => new()
     {
+        cbSize = (uint)Marshal.SizeOf<Win32Interop.NOTIFYICONDATAW>(),
+        hWnd = _messageWindow.Handle,
+        uID = TrayIconId,
+        szTip = string.Empty,
+        szInfo = string.Empty,
+        szInfoTitle = string.Empty
+    };
+
+    private static (IntPtr Handle, bool OwnsHandle) LoadAppIconHandle()
+    {
+        // 1. Load Assets\selector.ico from disk if present next to exe
         try
         {
             var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "selector.ico");
             if (File.Exists(iconPath))
             {
-                return new Drawing.Icon(iconPath, new Drawing.Size(32, 32));
+                var h = Win32Interop.LoadImageW(IntPtr.Zero, iconPath, Win32Interop.IMAGE_ICON, 32, 32, Win32Interop.LR_LOADFROMFILE);
+                if (h != IntPtr.Zero) return (h, true);
             }
         }
         catch { }
 
+        // 2. Extract embedded Win32 application icon directly from Selector.exe (works even when single-file exe is moved alone)
         try
         {
-            var res = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/selector.ico", UriKind.Absolute));
-            if (res?.Stream is not null)
+            var exePath = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
             {
-                using var stream = res.Stream;
-                return new Drawing.Icon(stream, new Drawing.Size(32, 32));
+                var count = Win32Interop.ExtractIconExW(exePath, 0, out var hLarge, out var hSmall, 1);
+                if (count > 0)
+                {
+                    if (hSmall != IntPtr.Zero)
+                    {
+                        if (hLarge != IntPtr.Zero) Win32Interop.DestroyIcon(hLarge);
+                        return (hSmall, true);
+                    }
+                    if (hLarge != IntPtr.Zero) return (hLarge, true);
+                }
             }
         }
         catch { }
 
-        using var bmp = new Drawing.Bitmap(32, 32);
-        using var g = Drawing.Graphics.FromImage(bmp);
-        g.SmoothingMode = Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(Drawing.Color.Transparent);
-
-        using var bgBrush = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 79, 70, 229));
-        g.FillEllipse(bgBrush, 2, 2, 28, 28);
-
-        using var font = new Drawing.Font("Segoe UI", 14, Drawing.FontStyle.Bold, Drawing.GraphicsUnit.Pixel);
-        using var sf = new Drawing.StringFormat { Alignment = Drawing.StringAlignment.Center, LineAlignment = Drawing.StringAlignment.Center };
-        g.DrawString("S", font, Drawing.Brushes.White, new Drawing.RectangleF(1, 2, 30, 28), sf);
-
-        return Drawing.Icon.FromHandle(bmp.GetHicon());
+        // 3. Fallback to standard Windows application icon
+        return (Win32Interop.LoadIconW(IntPtr.Zero, Win32Interop.IDI_APPLICATION), false);
     }
+
+    private static string Truncate(string s, int maxLen) =>
+        string.IsNullOrEmpty(s) ? string.Empty : (s.Length <= maxLen ? s : s[..maxLen]);
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         _settingsService.SettingsChanged -= OnStateChanged;
         _themeService.ThemeChanged -= OnThemeChanged;
-        _notifyIcon.MouseUp -= OnNotifyIconMouseUp;
-        _notifyIcon.Visible = false;
-        _notifyIcon.Dispose();
+
+        if (_iconAdded && _messageWindow.Handle != IntPtr.Zero)
+        {
+            var data = CreateBaseData();
+            Win32Interop.Shell_NotifyIconW(Win32Interop.NIM_DELETE, ref data);
+            _iconAdded = false;
+        }
+
+        if (_ownsIcon && _hIcon != IntPtr.Zero)
+        {
+            Win32Interop.DestroyIcon(_hIcon);
+            _hIcon = IntPtr.Zero;
+        }
+
+        _messageWindow.RemoveHook(WndProc);
+        _messageWindow.Dispose();
         _contextMenu.ForceClose();
     }
 }

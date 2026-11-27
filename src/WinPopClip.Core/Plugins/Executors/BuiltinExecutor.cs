@@ -19,7 +19,15 @@ public sealed partial class BuiltinExecutor : IPluginExecutor
         switch (cmd)
         {
             case "copy":
-                await host.CopyTextAsync(request.Context.Text, cancellationToken);
+                if (request.Context.IsDeferredCapture && string.IsNullOrWhiteSpace(request.Context.Text))
+                {
+                    // Doubao-style single-write copy: send Ctrl+C directly once to the active app (no restore/double clipboard event!)
+                    await host.SendCopyShortcutAsync(cancellationToken);
+                }
+                else
+                {
+                    await host.CopyTextAsync(request.Context.Text, cancellationToken);
+                }
                 return PluginExecutionResult.Ok(statusMessage: "已复制", suppressAfterHandling: true);
 
             case "cut":

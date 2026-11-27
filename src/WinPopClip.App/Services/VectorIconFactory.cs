@@ -1,7 +1,13 @@
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Xml.Linq;
 
 namespace WinPopClip.App.Services;
 
@@ -9,11 +15,25 @@ public sealed record IconPresetOption(string Value, string Label);
 
 /// <summary>
 /// Renders crisp, macOS SF-Symbol-inspired monochrome vector icons (symbol:*),
-/// PopClip monogram badges (square/circle), and Unicode/emoji fallbacks consistently
+/// PopClip monogram badges (square/circle), bundled or user-selected PNG/ICO/JPG/SVG image icons
+/// (with automatic Dark/Light monochrome template adaptation), and Unicode/emoji fallbacks consistently
 /// across the floating toolbar, plugin list, and icon picker.
 /// </summary>
 public static class VectorIconFactory
 {
+    private sealed record CachedRasterIcon(DateTime LastWriteUtc, BitmapSource Bitmap, bool IsMonochromeTemplate);
+    private sealed record SvgShapeSpec(
+        Geometry Geometry,
+        string? FillAttr,
+        string? StrokeAttr,
+        double StrokeWidth,
+        double Opacity,
+        FillRule FillRule);
+    private sealed record CachedSvgIcon(DateTime LastWriteUtc, double Width, double Height, IReadOnlyList<SvgShapeSpec> Shapes);
+
+    private static readonly ConcurrentDictionary<string, CachedRasterIcon> RasterCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, CachedSvgIcon> SvgCache = new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly Dictionary<string, string> SymbolGeometries = new(StringComparer.OrdinalIgnoreCase)
     {
         // Clean 16x16 coordinate space stroke paths (1.5px stroke, rounded caps/joins)
@@ -66,6 +86,64 @@ public static class VectorIconFactory
         new("circle filled S", "实心 S")
     };
 
+    /// <summary>
+    /// Copies a user-selected custom image/SVG into the persistent custom icons folder so moving or deleting
+    /// the original source file never breaks the floating toolbar icon.
+    /// </summary>
+    public static string SaveCustomIconFile(string sourceFilePath, string pluginId, string iconsDirectory)
+    {
+        Directory.CreateDirectory(iconsDirectory);
+        var ext = System.IO.Path.GetExtension(sourceFilePath);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
+
+        var safeId = Regex.Replace(pluginId ?? "icon", @"[^a-zA-Z0-9_\-\.]", "_");
+        if (safeId.Length > 48) safeId = safeId[..48];
+        var stamp = DateTime.UtcNow.Ticks.ToString("x")[^6..];
+        var destPath = System.IO.Path.Combine(iconsDirectory, $"{safeId}_{stamp}{ext.ToLowerInvariant()}");
+        File.Copy(sourceFilePath, destPath, overwrite: true);
+        return destPath;
+    }
+
+    public static bool TryExtractImageFileSpec(string? iconSpec, out string filePath, out bool forcePreserveColor)
+    {
+        filePath = string.Empty;
+        forcePreserveColor = false;
+        if (string.IsNullOrWhiteSpace(iconSpec)) return false;
+
+        var trimmed = iconSpec.Trim();
+        if (trimmed.StartsWith("file-color:", StringComparison.OrdinalIgnoreCase))
+        {
+            filePath = trimmed["file-color:".Length..].Trim().Trim('"');
+            forcePreserveColor = true;
+            return !string.IsNullOrWhiteSpace(filePath);
+        }
+
+        if (trimmed.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            filePath = trimmed["file:".Length..].Trim().Trim('"');
+            return !string.IsNullOrWhiteSpace(filePath);
+        }
+
+        var unquoted = trimmed.Trim('"');
+        if (System.IO.Path.IsPathRooted(unquoted) && File.Exists(unquoted))
+        {
+            var ext = System.IO.Path.GetExtension(unquoted);
+            if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".ico", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".webp", StringComparison.OrdinalIgnoreCase))
+            {
+                filePath = unquoted;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static FrameworkElement CreateIcon(
         string? iconSpec,
         Brush foreground,
@@ -73,6 +151,22 @@ public static class VectorIconFactory
         double size = 15.0)
     {
         var spec = string.IsNullOrWhiteSpace(iconSpec) ? "symbol:sparkle" : iconSpec.Trim();
+
+        // 0. Local image or SVG file icon ("file:<path>", "file-color:<path>", or absolute image path)
+        if (TryExtractImageFileSpec(spec, out var filePath, out var forcePreserveColor) && File.Exists(filePath))
+        {
+            var ext = System.IO.Path.GetExtension(filePath);
+            if (ext.Equals(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                var svgEl = TryCreateSvgIcon(filePath, foreground, forcePreserveColor, size);
+                if (svgEl is not null) return svgEl;
+            }
+            else
+            {
+                var imgEl = TryCreateRasterIcon(filePath, foreground, forcePreserveColor, size);
+                if (imgEl is not null) return imgEl;
+            }
+        }
 
         // 1. Crisp macOS-style monochrome vector symbol ("symbol:copy", "symbol:search", etc.)
         if (spec.StartsWith("symbol:", StringComparison.OrdinalIgnoreCase))
@@ -163,6 +257,11 @@ public static class VectorIconFactory
         }
 
         // 3. Fallback for user-entered Emoji or short text glyphs in exact unified size x size box
+        var fallbackText = spec.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ||
+                           spec.StartsWith("file-color:", StringComparison.OrdinalIgnoreCase)
+            ? "?"
+            : spec;
+
         return new Grid
         {
             Width = size,
@@ -179,7 +278,7 @@ public static class VectorIconFactory
                     VerticalAlignment = VerticalAlignment.Center,
                     Child = new TextBlock
                     {
-                        Text = spec,
+                        Text = fallbackText,
                         FontSize = size * 0.85,
                         Foreground = foreground,
                         TextAlignment = TextAlignment.Center,
@@ -189,6 +288,405 @@ public static class VectorIconFactory
                 }
             }
         };
+    }
+
+    private static FrameworkElement? TryCreateRasterIcon(string filePath, Brush foreground, bool forcePreserveColor, double size)
+    {
+        try
+        {
+            var lastWrite = File.GetLastWriteTimeUtc(filePath);
+            if (!RasterCache.TryGetValue(filePath, out var cached) || cached.LastWriteUtc != lastWrite)
+            {
+                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.DecodePixelWidth = 64;
+                bmp.StreamSource = stream;
+                bmp.EndInit();
+                bmp.Freeze();
+
+                var isMono = DetectMonochromeTemplateBitmap(bmp);
+                cached = new CachedRasterIcon(lastWrite, bmp, isMono);
+                RasterCache[filePath] = cached;
+            }
+
+            if (cached.IsMonochromeTemplate && !forcePreserveColor)
+            {
+                // Hardware-accelerated monochrome template tinting (adapts PopClip black PNGs like g.png / Baidu.png
+                // to crisp white in Dark Mode and charcoal in Light Mode!)
+                var maskBrush = new ImageBrush(cached.Bitmap)
+                {
+                    Stretch = Stretch.Uniform
+                };
+                RenderOptions.SetBitmapScalingMode(maskBrush, BitmapScalingMode.HighQuality);
+                maskBrush.Freeze();
+
+                return new Rectangle
+                {
+                    Width = size,
+                    Height = size,
+                    Fill = foreground,
+                    OpacityMask = maskBrush,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    SnapsToDevicePixels = true
+                };
+            }
+
+            var img = new Image
+            {
+                Source = cached.Bitmap,
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                SnapsToDevicePixels = true
+            };
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            return img;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool DetectMonochromeTemplateBitmap(BitmapSource source)
+    {
+        try
+        {
+            var converted = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+
+            var w = converted.PixelWidth;
+            var h = converted.PixelHeight;
+            if (w <= 0 || h <= 0) return false;
+
+            var stride = w * 4;
+            var pixels = new byte[stride * h];
+            converted.CopyPixels(pixels, stride, 0);
+
+            var stepX = Math.Max(1, w / 32);
+            var stepY = Math.Max(1, h / 32);
+            var opaqueCount = 0;
+            var transparentCount = 0;
+            var coloredCount = 0;
+
+            for (var y = 0; y < h; y += stepY)
+            {
+                var rowOffset = y * stride;
+                for (var x = 0; x < w; x += stepX)
+                {
+                    var idx = rowOffset + x * 4;
+                    var b = pixels[idx];
+                    var g = pixels[idx + 1];
+                    var r = pixels[idx + 2];
+                    var a = pixels[idx + 3];
+
+                    if (a < 24)
+                    {
+                        transparentCount++;
+                        continue;
+                    }
+
+                    opaqueCount++;
+                    var maxC = Math.Max(r, Math.Max(g, b));
+                    var minC = Math.Min(r, Math.Min(g, b));
+                    if (maxC - minC > 22)
+                    {
+                        coloredCount++;
+                    }
+                }
+            }
+
+            if (opaqueCount == 0 || transparentCount == 0) return false;
+            return (double)coloredCount / opaqueCount < 0.08;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static FrameworkElement? TryCreateSvgIcon(string filePath, Brush foreground, bool forcePreserveColor, double size)
+    {
+        try
+        {
+            var lastWrite = File.GetLastWriteTimeUtc(filePath);
+            if (!SvgCache.TryGetValue(filePath, out var cached) || cached.LastWriteUtc != lastWrite)
+            {
+                cached = ParseSvgFile(filePath, lastWrite);
+                if (cached is null) return null;
+                SvgCache[filePath] = cached;
+            }
+
+            if (cached.Shapes.Count == 0) return null;
+
+            var canvas = new Canvas
+            {
+                Width = cached.Width,
+                Height = cached.Height
+            };
+
+            foreach (var shape in cached.Shapes)
+            {
+                var fillBrush = ResolveSvgBrush(shape.FillAttr, defaultBrush: foreground, foreground, forcePreserveColor);
+                var strokeBrush = ResolveSvgBrush(shape.StrokeAttr, defaultBrush: null, foreground, forcePreserveColor);
+                if (fillBrush is null && strokeBrush is null) continue;
+
+                var path = new System.Windows.Shapes.Path
+                {
+                    Data = shape.Geometry,
+                    Fill = fillBrush,
+                    Stroke = strokeBrush,
+                    StrokeThickness = strokeBrush is not null ? shape.StrokeWidth : 0,
+                    Opacity = shape.Opacity
+                };
+                if (shape.Geometry is PathGeometry pg)
+                {
+                    pg.FillRule = shape.FillRule;
+                }
+                canvas.Children.Add(path);
+            }
+
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Child = canvas
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static CachedSvgIcon? ParseSvgFile(string filePath, DateTime lastWrite)
+    {
+        var doc = XDocument.Load(filePath);
+        var root = doc.Root;
+        if (root is null) return null;
+
+        double vbX = 0, vbY = 0, vbW = 24, vbH = 24;
+        var viewBox = root.Attribute("viewBox")?.Value;
+        if (!string.IsNullOrWhiteSpace(viewBox))
+        {
+            var nums = Regex.Split(viewBox.Trim(), @"[\s,]+")
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0)
+                .ToArray();
+            if (nums.Length == 4 && nums[2] > 0 && nums[3] > 0)
+            {
+                vbX = nums[0];
+                vbY = nums[1];
+                vbW = nums[2];
+                vbH = nums[3];
+            }
+        }
+        else
+        {
+            var w = ParseSvgNumber(root.Attribute("width")?.Value, 24);
+            var h = ParseSvgNumber(root.Attribute("height")?.Value, 24);
+            if (w > 0 && h > 0) { vbW = w; vbH = h; }
+        }
+
+        var shapes = new List<SvgShapeSpec>();
+        CollectSvgShapes(root, shapes, vbX, vbY, inheritedFill: "#000000", inheritedStroke: "none", inheritedStrokeWidth: 1.0, inheritedOpacity: 1.0, inheritedFillRule: FillRule.Nonzero);
+        return new CachedSvgIcon(lastWrite, vbW, vbH, shapes);
+    }
+
+    private static void CollectSvgShapes(
+        XElement element,
+        List<SvgShapeSpec> shapes,
+        double offsetX,
+        double offsetY,
+        string? inheritedFill,
+        string? inheritedStroke,
+        double inheritedStrokeWidth,
+        double inheritedOpacity,
+        FillRule inheritedFillRule)
+    {
+        var tag = element.Name.LocalName.ToLowerInvariant();
+        if (tag is "defs" or "title" or "desc" or "metadata" or "style") return;
+
+        var fill = GetSvgStyleOrAttr(element, "fill") ?? inheritedFill;
+        var stroke = GetSvgStyleOrAttr(element, "stroke") ?? inheritedStroke;
+        var strokeWidth = ParseSvgNumber(GetSvgStyleOrAttr(element, "stroke-width"), inheritedStrokeWidth);
+        var opacity = inheritedOpacity
+                      * ParseSvgNumber(GetSvgStyleOrAttr(element, "opacity"), 1.0)
+                      * ParseSvgNumber(GetSvgStyleOrAttr(element, "fill-opacity"), 1.0);
+        var fillRuleStr = GetSvgStyleOrAttr(element, "fill-rule");
+        var fillRule = string.Equals(fillRuleStr, "evenodd", StringComparison.OrdinalIgnoreCase)
+            ? FillRule.EvenOdd
+            : string.Equals(fillRuleStr, "nonzero", StringComparison.OrdinalIgnoreCase)
+                ? FillRule.Nonzero
+                : inheritedFillRule;
+
+        Geometry? geom = null;
+        switch (tag)
+        {
+            case "path":
+            {
+                var d = element.Attribute("d")?.Value;
+                if (!string.IsNullOrWhiteSpace(d))
+                {
+                    try
+                    {
+                        var parsed = Geometry.Parse(d);
+                        var pg = PathGeometry.CreateFromGeometry(parsed);
+                        pg.FillRule = fillRule;
+                        geom = pg;
+                    }
+                    catch { }
+                }
+                break;
+            }
+            case "rect":
+            {
+                var x = ParseSvgNumber(element.Attribute("x")?.Value, 0);
+                var y = ParseSvgNumber(element.Attribute("y")?.Value, 0);
+                var w = ParseSvgNumber(element.Attribute("width")?.Value, 0);
+                var h = ParseSvgNumber(element.Attribute("height")?.Value, 0);
+                var rx = ParseSvgNumber(element.Attribute("rx")?.Value, 0);
+                var ry = ParseSvgNumber(element.Attribute("ry")?.Value, rx);
+                if (w > 0 && h > 0)
+                {
+                    geom = new RectangleGeometry(new Rect(x, y, w, h), rx, ry);
+                }
+                break;
+            }
+            case "circle":
+            {
+                var cx = ParseSvgNumber(element.Attribute("cx")?.Value, 0);
+                var cy = ParseSvgNumber(element.Attribute("cy")?.Value, 0);
+                var r = ParseSvgNumber(element.Attribute("r")?.Value, 0);
+                if (r > 0) geom = new EllipseGeometry(new Point(cx, cy), r, r);
+                break;
+            }
+            case "ellipse":
+            {
+                var cx = ParseSvgNumber(element.Attribute("cx")?.Value, 0);
+                var cy = ParseSvgNumber(element.Attribute("cy")?.Value, 0);
+                var rx = ParseSvgNumber(element.Attribute("rx")?.Value, 0);
+                var ry = ParseSvgNumber(element.Attribute("ry")?.Value, 0);
+                if (rx > 0 && ry > 0) geom = new EllipseGeometry(new Point(cx, cy), rx, ry);
+                break;
+            }
+            case "line":
+            {
+                var x1 = ParseSvgNumber(element.Attribute("x1")?.Value, 0);
+                var y1 = ParseSvgNumber(element.Attribute("y1")?.Value, 0);
+                var x2 = ParseSvgNumber(element.Attribute("x2")?.Value, 0);
+                var y2 = ParseSvgNumber(element.Attribute("y2")?.Value, 0);
+                geom = new LineGeometry(new Point(x1, y1), new Point(x2, y2));
+                break;
+            }
+            case "polygon":
+            case "polyline":
+            {
+                var ptsRaw = element.Attribute("points")?.Value;
+                if (!string.IsNullOrWhiteSpace(ptsRaw))
+                {
+                    var nums = Regex.Split(ptsRaw.Trim(), @"[\s,]+")
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0)
+                        .ToArray();
+                    if (nums.Length >= 4)
+                    {
+                        var fig = new PathFigure { StartPoint = new Point(nums[0], nums[1]), IsClosed = tag == "polygon" };
+                        for (var i = 2; i + 1 < nums.Length; i += 2)
+                        {
+                            fig.Segments.Add(new LineSegment(new Point(nums[i], nums[i + 1]), true));
+                        }
+                        geom = new PathGeometry(new[] { fig }) { FillRule = fillRule };
+                    }
+                }
+                break;
+            }
+        }
+
+        if (geom is not null)
+        {
+            if (Math.Abs(offsetX) > 0.001 || Math.Abs(offsetY) > 0.001)
+            {
+                geom.Transform = new TranslateTransform(-offsetX, -offsetY);
+            }
+            geom.Freeze();
+            shapes.Add(new SvgShapeSpec(geom, fill, stroke, Math.Max(0.5, strokeWidth), Math.Clamp(opacity, 0.05, 1.0), fillRule));
+        }
+
+        foreach (var child in element.Elements())
+        {
+            CollectSvgShapes(child, shapes, offsetX, offsetY, fill, stroke, strokeWidth, opacity, fillRule);
+        }
+    }
+
+    private static string? GetSvgStyleOrAttr(XElement el, string name)
+    {
+        var direct = el.Attribute(name)?.Value;
+        if (!string.IsNullOrWhiteSpace(direct)) return direct.Trim();
+
+        var style = el.Attribute("style")?.Value;
+        if (string.IsNullOrWhiteSpace(style)) return null;
+        foreach (var part in style.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var idx = part.IndexOf(':');
+            if (idx <= 0) continue;
+            if (part[..idx].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(idx + 1)..].Trim();
+            }
+        }
+        return null;
+    }
+
+    private static double ParseSvgNumber(string? raw, double fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return fallback;
+        var cleaned = Regex.Replace(raw.Trim(), @"(px|pt|em|rem|%)$", string.Empty, RegexOptions.IgnoreCase);
+        return double.TryParse(cleaned, NumberStyles.Float, CultureInfo.InvariantCulture, out var val) ? val : fallback;
+    }
+
+    private static Brush? ResolveSvgBrush(string? attr, Brush? defaultBrush, Brush foreground, bool forcePreserveColor)
+    {
+        if (string.IsNullOrWhiteSpace(attr)) return defaultBrush;
+        var trimmed = attr.Trim();
+        if (trimmed.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        if (trimmed.Equals("currentColor", StringComparison.OrdinalIgnoreCase))
+        {
+            return foreground;
+        }
+
+        try
+        {
+            if (ColorConverter.ConvertFromString(trimmed) is Color c)
+            {
+                var maxC = Math.Max(c.R, Math.Max(c.G, c.B));
+                var minC = Math.Min(c.R, Math.Min(c.G, c.B));
+                var isGrayscale = (maxC - minC) <= 18;
+                if (isGrayscale && !forcePreserveColor)
+                {
+                    return foreground;
+                }
+                var brush = new SolidColorBrush(c);
+                brush.Freeze();
+                return brush;
+            }
+        }
+        catch { }
+
+        return defaultBrush;
     }
 
     /// <summary>

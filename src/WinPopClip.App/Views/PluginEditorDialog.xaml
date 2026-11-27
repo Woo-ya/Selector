@@ -30,8 +30,11 @@
                     <TextBlock Text="插件名称:" VerticalAlignment="Center" />
                     <TextBox x:Name="NameBox" Grid.Column="1" Padding="6,4" Margin="0,0,12,0" />
                     <TextBlock Text="图标/徽章:" Grid.Column="2" VerticalAlignment="Center" />
-                    <TextBox x:Name="IconBox" Grid.Column="3" Padding="6,4" Text="symbol:sparkle"
-                             ToolTip="支持单色矢量图标 symbol:search / symbol:copy，或 PopClip 徽章 square filled AI / circle W" />
+                    <DockPanel Grid.Column="3">
+                        <Button DockPanel.Dock="Right" Content="图片..." Padding="7,3" Margin="4,0,0,0" FontSize="11.5" Click="OnBrowseIconClick" ToolTip="选择本地 PNG / SVG / ICO 图片" />
+                        <TextBox x:Name="IconBox" Padding="6,4" Text="symbol:sparkle"
+                                 ToolTip="支持单色矢量图标 symbol:search、PopClip 徽章 square filled AI 或本地图片 file:路径" />
+                    </DockPanel>
                 </Grid>
 
                 <TextBlock Text="选择简洁矢量图标或徽章（也支持直接输入 Emoji 或 symbol:* / square filled AB）:"

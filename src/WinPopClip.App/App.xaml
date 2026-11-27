@@ -5,7 +5,7 @@
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <!-- Initial warm-paper tokens (immediately synced by ThemeService at startup) -->
+        <!-- Initial cool-gray light tokens (immediately synced by ThemeService at startup) -->
         <SolidColorBrush x:Key="AccentBrush" Color="#4F46E5" />
         <SolidColorBrush x:Key="AccentHoverBrush" Color="#E64F46E5" />
         <SolidColorBrush x:Key="AccentPressedBrush" Color="#CC4F46E5" />
@@ -20,19 +20,19 @@
             <GradientStop Color="#0C4F46E5" Offset="0.72" />
         </RadialGradientBrush>
 
-        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F9F7F1" />
-        <SolidColorBrush x:Key="AppBgBrush" Color="#F9F7F1" />
-        <SolidColorBrush x:Key="LayerBrush" Color="#CCFFFDF8" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#FDFCF8" />
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F6F6F6" />
+        <SolidColorBrush x:Key="AppBgBrush" Color="#F6F6F6" />
+        <SolidColorBrush x:Key="LayerBrush" Color="#F6F6F6" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#F6F6F6" />
         <SolidColorBrush x:Key="SurfaceAltBrush" Color="#08000000" />
-        <SolidColorBrush x:Key="CardBrush" Color="#B3FFFFFF" />
-        <SolidColorBrush x:Key="CardHoverBrush" Color="#E6FFFFFF" />
+        <SolidColorBrush x:Key="CardBrush" Color="#E6FFFFFF" />
+        <SolidColorBrush x:Key="CardHoverBrush" Color="#FFFFFFFF" />
         <SolidColorBrush x:Key="CardBorderBrush" Color="#14000000" />
         <SolidColorBrush x:Key="BorderBrushTheme" Color="#14000000" />
-        <SolidColorBrush x:Key="ControlBrush" Color="#B3FFFFFF" />
-        <SolidColorBrush x:Key="InputBgBrush" Color="#B3FFFFFF" />
-        <SolidColorBrush x:Key="ControlHoverBrush" Color="#80F9F9F9" />
-        <SolidColorBrush x:Key="ControlPressedBrush" Color="#4DF9F9F9" />
+        <SolidColorBrush x:Key="ControlBrush" Color="#CCFFFFFF" />
+        <SolidColorBrush x:Key="InputBgBrush" Color="#CCFFFFFF" />
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="#99F6F6F6" />
+        <SolidColorBrush x:Key="ControlPressedBrush" Color="#66EFEFEF" />
         <SolidColorBrush x:Key="ControlBorderBrush" Color="#1F000000" />
         <SolidColorBrush x:Key="ButtonBorderBrush" Color="#1F000000" />
         <SolidColorBrush x:Key="ControlStrongBorderBrush" Color="#72000000" />
@@ -41,7 +41,7 @@
         <SolidColorBrush x:Key="SubtlePressedBrush" Color="#06000000" />
         <SolidColorBrush x:Key="SubtleSelectedBrush" Color="#0D000000" />
         <SolidColorBrush x:Key="DividerBrush" Color="#0F000000" />
-        <SolidColorBrush x:Key="FlyoutBrush" Color="#FDFCF8" />
+        <SolidColorBrush x:Key="FlyoutBrush" Color="#F6F6F6" />
         <SolidColorBrush x:Key="FlyoutBorderBrush" Color="#1A000000" />
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E4000000" />
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9E000000" />
@@ -105,10 +105,7 @@
             </Setter>
         </Style>
 
-        <!-- Text Hierarchy (inherit FontFamily from Window so icon controls are never overridden) -->
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-        </Style>
+        <!-- Text Hierarchy (normal TextBlocks inherit FontFamily & Foreground from Window so AccentButton / Segmented / Tray pills inherit TextOnAccentBrush cleanly) -->
         <Style x:Key="TitleTextStyle" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource TextFont}" />
             <Setter Property="FontSize" Value="{StaticResource TitleFontSize}" />

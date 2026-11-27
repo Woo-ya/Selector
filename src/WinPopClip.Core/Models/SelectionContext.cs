@@ -22,6 +22,7 @@ public readonly record struct ScreenPoint(double X, double Y);
 public enum SelectionCaptureSource
 {
     UiAutomation,
+    DeferredCapture,
     ClipboardFallback,
     ManualTest
 }
@@ -38,6 +39,9 @@ public sealed class SelectionContext
     public nint WindowHandle { get; init; }
     public bool IsEditable { get; init; }
     public bool IsPasswordField { get; init; }
+    public bool IsEmptyInputSummon { get; init; }
+    public bool IsDeferredCapture { get; init; }
+    public bool HasClipboardText { get; init; }
     public SelectionCaptureSource Source { get; init; } = SelectionCaptureSource.UiAutomation;
     public ScreenRect? SelectionBounds { get; init; }
     public ScreenPoint AnchorPoint { get; init; }

@@ -47,6 +47,7 @@ public sealed class PluginOptionDefinition
     public string DefaultValue { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public List<string> Choices { get; set; } = new();
+    public List<string> ChoiceLabels { get; set; } = new();
 }
 
 /// <summary>
@@ -81,6 +82,12 @@ public sealed class PluginActionConfig
 
     /// <summary>PopClip-compatible JavaScript snippet body (has access to global popclip object).</summary>
     public string? JavaScriptCode { get; set; }
+
+    /// <summary>Path to a PopClip CommonJS/Module entry file (e.g. Config.js inside .popclipext).</summary>
+    public string? JavaScriptModulePath { get; set; }
+
+    /// <summary>Extension directory used as working directory / module resolution base.</summary>
+    public string? WorkingDirectory { get; set; }
 
     /// <summary>Declared permissions such as "network" for PopClip JS extensions.</summary>
     public List<string> Entitlements { get; set; } = new();
@@ -132,6 +139,12 @@ public sealed class PluginManifest
     public string? SourceFilePath { get; set; }
 
     [JsonIgnore]
+    public string? DefaultIcon { get; set; }
+
+    [JsonIgnore]
+    public ToolbarDisplayMode? DisplayMode { get; set; }
+
+    [JsonIgnore]
     public bool Enabled { get; set; } = true;
 
     [JsonIgnore]
@@ -173,6 +186,8 @@ public sealed class PluginManifest
                 HttpBodyTemplate = Action.HttpBodyTemplate,
                 HttpResponseJsonPath = Action.HttpResponseJsonPath,
                 JavaScriptCode = Action.JavaScriptCode,
+                JavaScriptModulePath = Action.JavaScriptModulePath,
+                WorkingDirectory = Action.WorkingDirectory,
                 Entitlements = new List<string>(Action.Entitlements)
             },
             Options = Options.Select(o => new PluginOptionDefinition
@@ -182,10 +197,13 @@ public sealed class PluginManifest
                 Type = o.Type,
                 DefaultValue = o.DefaultValue,
                 Description = o.Description,
-                Choices = new List<string>(o.Choices)
+                Choices = new List<string>(o.Choices),
+                ChoiceLabels = new List<string>(o.ChoiceLabels)
             }).ToList(),
             Source = Source,
             SourceFilePath = SourceFilePath,
+            DefaultIcon = DefaultIcon,
+            DisplayMode = DisplayMode,
             Enabled = Enabled,
             Order = Order
         };

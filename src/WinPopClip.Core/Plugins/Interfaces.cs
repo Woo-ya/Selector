@@ -14,6 +14,8 @@ public interface IPluginHostEnvironment
     Task SendCutShortcutAsync(CancellationToken cancellationToken = default);
     Task PasteTextAsync(string text, bool restorePreviousClipboard = true, CancellationToken cancellationToken = default);
     Task SendPasteShortcutAsync(CancellationToken cancellationToken = default);
+    Task SendKeyComboAsync(string key, IReadOnlyList<string> modifiers, CancellationToken cancellationToken = default);
+    Task ReappearToolbarAsync(ScreenPoint? anchor = null, CancellationToken cancellationToken = default);
     Task OpenUrlAsync(string url, CancellationToken cancellationToken = default);
     void ShowToast(string message, ScreenPoint? anchor = null);
 }

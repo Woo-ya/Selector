@@ -44,6 +44,28 @@ public partial class PluginEditorDialog : Window
         }
     }
 
+    private void OnBrowseIconClick(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择插件自定义浮窗图标",
+            Filter = "图片与矢量图标 (*.png;*.svg;*.ico;*.jpg;*.jpeg;*.webp;*.bmp)|*.png;*.svg;*.ico;*.jpg;*.jpeg;*.webp;*.bmp|所有文件 (*.*)|*.*",
+            Multiselect = false
+        };
+        if (dlg.ShowDialog(this) != true || string.IsNullOrWhiteSpace(dlg.FileName)) return;
+
+        try
+        {
+            var idHint = string.IsNullOrWhiteSpace(IdBox.Text) ? NameBox.Text : IdBox.Text;
+            var stored = VectorIconFactory.SaveCustomIconFile(dlg.FileName, string.IsNullOrWhiteSpace(idHint) ? "custom" : idHint.Trim(), WinPopClip.Core.Storage.AppPaths.GetCustomIconsDirectory());
+            IconBox.Text = $"file:{stored}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"导入图标失败：{ex.Message}", "Selector", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void LoadFromManifest(PluginManifest m)
     {
         IdBox.Text = m.Id;

@@ -9,7 +9,12 @@
         ShowActivated="False"
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
-        Focusable="False">
+        Focusable="False"
+        FontFamily="{StaticResource TextFont}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="Grayscale">
     <Grid x:Name="RootGrid" Margin="16" RenderTransformOrigin="0.5,0.5">
         <Grid.RenderTransform>
             <TransformGroup>
@@ -18,7 +23,7 @@
             </TransformGroup>
         </Grid.RenderTransform>
 
-        <!-- Actions Capsule + Material Layers + Optional Inline Theme Switcher -->
+        <!-- Actions Capsule + Material Layers -->
         <StackPanel x:Name="ActionsContainer" Visibility="Visible" HorizontalAlignment="Center">
             <Polygon x:Name="TopPointer"
                      Points="0,6 6,0 12,6"
@@ -60,7 +65,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- Layer 3: Foreground Interactive Content (adapts to Auto / Presets / Custom WxH) -->
+                    <!-- Layer 3: Foreground Interactive Content -->
                     <StackPanel x:Name="ContentStack" Orientation="Vertical" Margin="6,5" VerticalAlignment="Center">
                         <ScrollViewer x:Name="ActionsScrollViewer"
                                       HorizontalScrollBarVisibility="Disabled"
@@ -68,16 +73,6 @@
                                       Focusable="False">
                             <Grid x:Name="ActionsHostGrid" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </ScrollViewer>
-
-                        <!-- Inline non-activating 3-option Theme Switcher Strip -->
-                        <Border x:Name="ThemeSwitcherPanel"
-                                Visibility="Collapsed"
-                                Margin="2,6,2,1"
-                                Padding="4,4"
-                                CornerRadius="9"
-                                BorderThickness="1">
-                            <StackPanel x:Name="ThemeOptionsStack" Orientation="Horizontal" HorizontalAlignment="Center" />
-                        </Border>
                     </StackPanel>
                 </Grid>
             </Border>

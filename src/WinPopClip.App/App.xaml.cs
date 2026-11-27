@@ -82,14 +82,34 @@ public partial class App : Application
         _trayIcon.ExitRequested += (_, _) => Shutdown();
 
         _coordinator.Start();
+
+        // Keep Windows autostart registry entry synchronized with the currently running executable
+        // so rebooting never silently launches a stale older version (e.g. an old fix2 folder).
+        if (_settingsService.Settings.LaunchAtStartup)
+        {
+            var (synced, syncErr) = StartupService.SetStartupEnabled(true);
+            if (!synced && !string.IsNullOrWhiteSpace(syncErr))
+            {
+                _diagnostics.Write($"开机自启路径同步跳过：{syncErr}");
+            }
+        }
+
         _diagnostics.Write(
             $"Selector 已启动 · 主题={ThemeResolver.GetDisplayName(_themeService.CurrentPreference)}" +
             $"（生效：{ThemeResolver.GetDisplayName(_themeService.EffectiveTheme)}）" +
             $" · 材质={ThemeResolver.GetMaterialDisplayName(_themeService.CurrentMaterial)}" +
             $" · 尺寸={_themeService.CurrentToolbarScale * 100:0}%" +
-            $" · 圆角={_themeService.CurrentCornerRadius:0}px · 插件={_pluginRegistry.GetAllPlugins().Count}");
+            $" · 圆角={_themeService.CurrentCornerRadius:0}px · 插件={_pluginRegistry.GetAllPlugins().Count}" +
+            $" · 路径={Environment.ProcessPath}");
 
-        OpenSettingsWindow();
+        var startMinimized = e.Args.Any(a =>
+            a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) ||
+            a.Equals("--autostart", StringComparison.OrdinalIgnoreCase));
+
+        if (!startMinimized)
+        {
+            OpenSettingsWindow();
+        }
     }
 
     private void OpenSettingsWindow(string? pageKey = null)

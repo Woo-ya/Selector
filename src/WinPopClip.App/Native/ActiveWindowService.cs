@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using WinForms = System.Windows.Forms;
 
 namespace WinPopClip.App.Native;
 
@@ -11,7 +10,8 @@ public sealed record ActiveWindowInfo(
     string ProcessName,
     string WindowTitle,
     bool IsFullscreen,
-    bool IsPotentiallyElevated);
+    bool IsPotentiallyElevated,
+    string ClassName = "");
 
 public sealed class ActiveWindowService
 {
@@ -23,12 +23,31 @@ public sealed class ActiveWindowService
         "Shell_SecondaryTrayWnd"
     };
 
+    /// <summary>
+    /// Modern frameless/custom-chrome desktop apps (Electron, Chromium, WebView2, Qt, WeChat, QQ, UWP)
+    /// strip WS_CAPTION/WS_THICKFRAME to draw custom titlebars and must NOT be misclassified as
+    /// exclusive fullscreen games merely because their window fills the monitor.
+    /// </summary>
+    private static readonly string[] CustomChromeWindowClassPrefixes =
+    {
+        "Chrome_WidgetWin_",
+        "MozillaWindowClass",
+        "ApplicationFrameWindow",
+        "Qt5QWindow",
+        "Qt6QWindow",
+        "WeChat",
+        "Weixin",
+        "TXGuiFoundation",
+        "CEFCLIENT",
+        "Tauri Window"
+    };
+
     public ActiveWindowInfo GetForegroundWindowInfo()
     {
         var hwnd = Win32Interop.GetForegroundWindow();
         if (hwnd == IntPtr.Zero)
         {
-            return new ActiveWindowInfo(IntPtr.Zero, 0, string.Empty, string.Empty, false, false);
+            return new ActiveWindowInfo(IntPtr.Zero, 0, string.Empty, string.Empty, false, false, string.Empty);
         }
 
         _ = Win32Interop.GetWindowThreadProcessId(hwnd, out var pid);
@@ -57,24 +76,39 @@ public sealed class ActiveWindowService
         _ = Win32Interop.GetWindowText(hwnd, titleBuilder, titleBuilder.Capacity);
         var title = titleBuilder.ToString();
 
-        var isFullscreen = IsTrueFullscreenWindow(hwnd, processName);
-        return new ActiveWindowInfo(hwnd, pid, processName, title, isFullscreen, isPotentiallyElevated);
+        var classBuilder = new StringBuilder(128);
+        _ = Win32Interop.GetClassName(hwnd, classBuilder, classBuilder.Capacity);
+        var className = classBuilder.ToString();
+
+        var isFullscreen = IsTrueFullscreenWindow(hwnd, processName, className);
+        return new ActiveWindowInfo(hwnd, pid, processName, title, isFullscreen, isPotentiallyElevated, className);
+    }
+
+    public static bool IsCustomChromeDesktopClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className)) return false;
+        foreach (var prefix in CustomChromeWindowClassPrefixes)
+        {
+            if (className.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
     /// Accurately detects exclusive fullscreen apps/games without false-positiving on maximized
-    /// Edge/Chrome/VS Code windows (even with auto-hide taskbar or secondary monitors).
+    /// or frameless custom-chrome Edge/Chrome/Electron/WeChat/VS Code windows.
     /// </summary>
-    private static bool IsTrueFullscreenWindow(IntPtr hwnd, string processName)
+    private static bool IsTrueFullscreenWindow(IntPtr hwnd, string processName, string className)
     {
         if (processName.Equals("explorer", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        var classBuilder = new StringBuilder(128);
-        _ = Win32Interop.GetClassName(hwnd, classBuilder, classBuilder.Capacity);
-        if (ShellWindowClasses.Contains(classBuilder.ToString()))
+        if (ShellWindowClasses.Contains(className))
         {
             return false;
         }
@@ -87,8 +121,8 @@ public sealed class ActiveWindowService
             return true;
         }
 
-        // 2. Normal maximized windows (Edge, Chrome, Office, VS Code) are NOT exclusive fullscreen
-        if (Win32Interop.IsZoomed(hwnd))
+        // 2. Normal maximized windows and frameless custom-chrome productivity apps are NOT fullscreen games
+        if (Win32Interop.IsZoomed(hwnd) || IsCustomChromeDesktopClass(className))
         {
             return false;
         }
@@ -116,8 +150,7 @@ public sealed class ActiveWindowService
             }
         }
 
-        var screen = WinForms.Screen.FromHandle(hwnd);
-        var bounds = screen.Bounds;
+        var bounds = Win32Interop.GetMonitorBounds(hwnd);
         return rect.Left <= bounds.Left &&
                rect.Top <= bounds.Top &&
                rect.Right >= bounds.Right &&

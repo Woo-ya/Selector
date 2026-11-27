@@ -22,11 +22,14 @@ public partial class SettingsWindow : Window
     private readonly ThemeService _themeService;
     private readonly DiagnosticsLog _diagnostics;
     private readonly string _userPluginsDir;
-    private readonly Dictionary<string, TextBox> _optionEditors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<string>> _optionGetters = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _suppressEvents;
     private string? _activePage; // null = Overview, or "General", "Appearance", "Plugins", "Playground"
     private int _navGeneration;
+    private bool _isInstallingPlugins;
+
+    private const string PopClipExtensionsUrl = "https://www.popclip.app/extensions/";
 
     // Plugin list drag-and-drop reorder state
     private Point _dragStartPoint;
@@ -100,7 +103,7 @@ public partial class SettingsWindow : Window
 
         PlaygroundBox.Text =
             "欢迎使用 Selector！试着划选下面不同类型的内容（或直接切换到 Edge / 记事本 / VS Code 划词测试）：\n\n" +
-            "1. 普通文本：hello selector world （试试单色矢量图标与亚克力/实体/液态玻璃材质，点击浮窗右侧图标可直接切换主题）。\n" +
+            "1. 普通文本：hello selector world （试试单色矢量图标与亚克力/实体/液态玻璃材质，支持为每个插件独立配置仅图标、仅名称或图标+名称）。\n" +
             "2. 链接识别：https://github.com/wangmingkun148/DropShelf\n" +
             "3. JSON 识别：{\"app\":\"Selector\",\"material\":\"LiquidGlass\",\"size\":\"Custom\"}\n" +
             "4. 选中下方整段 PopClip Snippet 可直接弹出「一键安装」按钮：\n" +
@@ -402,10 +405,13 @@ public partial class SettingsWindow : Window
             TriggerMode.RequireAltKey => "Alt + 划词",
             _ => "鼠标拖拽划词"
         };
-        TileGeneral.Summary = $"{(s.Enabled ? "已启用" : "已暂停")} · {triggerLabel} · {(s.EnableClipboardFallback ? "剪贴板回退" : "仅 UIA")}";
+        var startupSegment = StartupService.IsStartupEnabled() ? " · 开机自启" : string.Empty;
+        TileGeneral.Summary = $"{(s.Enabled ? "已启用" : "已暂停")} · {triggerLabel}{startupSegment} · {(s.EnableClipboardFallback ? "剪贴板回退" : "仅 UIA")}";
 
         var scalePercent = Math.Round(ThemeResolver.ClampToolbarScale(s.ToolbarScale) * 100);
-        TileAppearance.Summary = $"{ThemeResolver.GetDisplayName(_themeService.CurrentPreference)} · {ThemeResolver.GetMaterialDisplayName(s.ToolbarMaterial)} · 尺寸 {scalePercent:0}% · 圆角 {s.ToolbarCornerRadius:0}px";
+        var popupMs = ThemeResolver.ResolvePopupDurationMs(s.ToolbarPopupSpeed, s.ToolbarPopupDurationMs);
+        var popupSpeedLabel = ThemeResolver.GetPopupSpeedDisplayName(s.ToolbarPopupSpeed);
+        TileAppearance.Summary = $"{ThemeResolver.GetDisplayName(_themeService.CurrentPreference)} · {ThemeResolver.GetMaterialDisplayName(s.ToolbarMaterial)} · 尺寸 {scalePercent:0}% · {popupSpeedLabel}({popupMs}ms)";
 
         var allPlugins = _pluginRegistry.GetAllPlugins();
         var enabledCount = allPlugins.Count(p => p.Enabled);
@@ -420,9 +426,11 @@ public partial class SettingsWindow : Window
         GettingStartedSection.Visibility = s.ShowGettingStarted ? Visibility.Visible : Visibility.Collapsed;
         OverviewMasterToggle.IsChecked = s.Enabled;
         GeneralMasterToggle.IsChecked = s.Enabled;
+        LaunchAtStartupCheck.IsChecked = StartupService.IsStartupEnabled();
         SelectListBoxByTag(TriggerModeSegmented, s.TriggerMode.ToString());
         DoubleClickCheck.IsChecked = s.EnableDoubleClickSelection;
-        ClipboardFallbackCheck.IsChecked = s.EnableClipboardFallback;
+        DialogDoubleClickCheck.IsChecked = s.EnableDialogDoubleClickSummon;
+        ClipboardFallbackCheck.IsChecked = false;
         FullscreenDisableCheck.IsChecked = s.DisableInFullscreen;
         MaxActionsBox.Text = s.MaxVisibleActions.ToString();
         DragThresholdBox.Text = s.DragThresholdPixels.ToString();
@@ -449,6 +457,11 @@ public partial class SettingsWindow : Window
         CornerRadiusSlider.Value = radius;
         CornerRadiusValueText.Text = $"{radius:0} px";
 
+        var popupMs = ThemeResolver.ResolvePopupDurationMs(s.ToolbarPopupSpeed, s.ToolbarPopupDurationMs);
+        SelectListBoxByTag(PopupSpeedSegmented, s.ToolbarPopupSpeed.ToString());
+        PopupDurationSlider.Value = popupMs;
+        PopupDurationValueText.Text = popupMs == 0 ? "0 ms" : $"{popupMs} ms";
+
         var effectiveName = _themeService.IsDarkEffective ? "深色模式" : "浅色模式";
         EffectiveThemeHintText.Text = _themeService.CurrentPreference == ToolbarTheme.System
             ? $"当前跟随 Windows 系统外观（实际生效：{effectiveName}），与划词浮窗、系统托盘右键菜单实时同步。"
@@ -463,12 +476,13 @@ public partial class SettingsWindow : Window
         var isDark = _themeService.IsDarkEffective;
         var s = _settingsService.Settings;
         var radius = ThemeResolver.ClampCornerRadius(s.ToolbarCornerRadius);
-        var showLabel = s.DisplayMode == ToolbarDisplayMode.IconAndText;
+        var showLabel = s.DisplayMode != ToolbarDisplayMode.IconOnly;
+        var showIcon = s.DisplayMode != ToolbarDisplayMode.TextOnly;
         var metrics = FloatingToolbarWindow.ComputeSizeMetrics(s, showLabel);
 
         PreviewStageBackdrop.Background = isDark
             ? new LinearGradientBrush(Color.FromRgb(26, 28, 34), Color.FromRgb(36, 30, 48), new Point(0, 0), new Point(1, 1))
-            : new LinearGradientBrush(Color.FromRgb(236, 232, 224), Color.FromRgb(235, 232, 248), new Point(0, 0), new Point(1, 1));
+            : new LinearGradientBrush(Color.FromRgb(246, 246, 246), Color.FromRgb(236, 238, 246), new Point(0, 0), new Point(1, 1));
 
         FloatingToolbarWindow.ApplyMaterialVisual(
             PreviewPillBorder,
@@ -494,56 +508,63 @@ public partial class SettingsWindow : Window
         PreviewContentHost.Children.Clear();
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-        var fg = isDark ? new SolidColorBrush(Color.FromRgb(248, 248, 248)) : new SolidColorBrush(Color.FromArgb(228, 0, 0, 0));
+        var fg = isDark ? new SolidColorBrush(Color.FromRgb(250, 250, 250)) : new SolidColorBrush(Color.FromArgb(242, 24, 24, 27));
         var invFg = isDark ? new SolidColorBrush(Color.FromRgb(24, 24, 24)) : Brushes.White;
-        var sep = isDark ? new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)) : new SolidColorBrush(Color.FromArgb(22, 0, 0, 0));
+        var sep = isDark ? new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)) : new SolidColorBrush(Color.FromArgb(24, 0, 0, 0));
 
         var samples = new (string Icon, string Label)[]
         {
             ("symbol:copy", "复制"),
             ("symbol:search", "搜索"),
             ("symbol:translate", "翻译"),
-            ("square AA", "转大写"),
-            (_themeService.CurrentPreference switch { ToolbarTheme.Light => "symbol:sun", ToolbarTheme.Dark => "symbol:moon", _ => "symbol:contrast" }, "")
+            ("square AA", "转大写")
         };
 
         for (var i = 0; i < samples.Length; i++)
         {
             if (i > 0)
             {
+                var sepMargin = Math.Round((showLabel ? 0.5 : 1.5) * metrics.Scale, 1);
                 panel.Children.Add(new Border
                 {
                     Width = 1,
                     Height = metrics.SeparatorHeight,
-                    Margin = new Thickness(Math.Round(2.5 * metrics.Scale, 1), 0, Math.Round(2.5 * metrics.Scale, 1), 0),
+                    Margin = new Thickness(sepMargin, 0, sepMargin, 0),
                     Background = sep,
                     VerticalAlignment = VerticalAlignment.Center
                 });
             }
 
+            var itemHorizPad = Math.Round((showLabel ? 6.5 : 7.5) * metrics.Scale, 1);
             var itemPanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(metrics.ButtonPadding.Left * 0.72, metrics.ButtonPadding.Top * 0.52, metrics.ButtonPadding.Right * 0.72, metrics.ButtonPadding.Bottom * 0.52)
+                Margin = new Thickness(itemHorizPad, metrics.ButtonPadding.Top * 0.52, itemHorizPad, metrics.ButtonPadding.Bottom * 0.52)
             };
-            var iconEl = VectorIconFactory.CreateIcon(samples[i].Icon, fg, invFg, size: metrics.IconSize);
-            if (showLabel && !string.IsNullOrEmpty(samples[i].Label))
+            if (showIcon)
             {
-                iconEl.Margin = new Thickness(0, 0, metrics.IconTextGap, 0);
+                var iconEl = VectorIconFactory.CreateIcon(samples[i].Icon, fg, invFg, size: metrics.IconSize);
+                if (showLabel && !string.IsNullOrEmpty(samples[i].Label))
+                {
+                    iconEl.Margin = new Thickness(0, 0, Math.Round(4.0 * metrics.Scale, 1), 0);
+                }
+                itemPanel.Children.Add(iconEl);
             }
-            itemPanel.Children.Add(iconEl);
 
             if (showLabel && !string.IsNullOrEmpty(samples[i].Label))
             {
-                itemPanel.Children.Add(new TextBlock
+                var tb = new TextBlock
                 {
                     Text = samples[i].Label,
-                    FontSize = metrics.FontSize,
-                    FontWeight = FontWeights.Medium,
+                    FontSize = showIcon ? metrics.FontSize : metrics.TextOnlyFontSize,
+                    FontWeight = FontWeights.SemiBold,
                     Foreground = fg,
-                    VerticalAlignment = VerticalAlignment.Center
-                });
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 0.5)
+                };
+                TextOptions.SetTextFormattingMode(tb, TextFormattingMode.Display);
+                itemPanel.Children.Add(tb);
             }
 
             panel.Children.Add(itemPanel);
@@ -568,6 +589,26 @@ public partial class SettingsWindow : Window
         RefreshOverviewSummaries();
     }
 
+    private void OnLaunchAtStartupChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        var desired = LaunchAtStartupCheck.IsChecked == true;
+        var (success, error) = StartupService.SetStartupEnabled(desired);
+        if (!success)
+        {
+            _suppressEvents = true;
+            LaunchAtStartupCheck.IsChecked = !desired;
+            _suppressEvents = false;
+            MessageBox.Show(this, $"设置开机自启失败：{error}", "Selector", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _settingsService.Settings.LaunchAtStartup = desired;
+        _settingsService.Save();
+        _diagnostics.Write(desired ? "已开启开机自动启动（登录时静默驻留托盘）" : "已关闭开机自动启动");
+        RefreshOverviewSummaries();
+    }
+
     private void OnTriggerSegmentedChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressEvents) return;
@@ -585,6 +626,7 @@ public partial class SettingsWindow : Window
         if (_suppressEvents) return;
         var s = _settingsService.Settings;
         s.EnableDoubleClickSelection = DoubleClickCheck.IsChecked == true;
+        s.EnableDialogDoubleClickSummon = DialogDoubleClickCheck.IsChecked == true;
         s.EnableClipboardFallback = ClipboardFallbackCheck.IsChecked == true;
         s.DisableInFullscreen = FullscreenDisableCheck.IsChecked == true;
         _settingsService.Save();
@@ -669,6 +711,91 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void OnPopupSpeedSegmentedChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        if (PopupSpeedSegmented.SelectedItem is ListBoxItem item &&
+            Enum.TryParse<ToolbarPopupSpeed>(item.Tag?.ToString(), out var speed))
+        {
+            var targetMs = speed == ToolbarPopupSpeed.Custom
+                ? ThemeResolver.ClampPopupDurationMs((int)Math.Round(PopupDurationSlider.Value))
+                : ThemeResolver.ResolvePopupDurationMs(speed, _settingsService.Settings.ToolbarPopupDurationMs);
+
+            _suppressEvents = true;
+            PopupDurationSlider.Value = targetMs;
+            PopupDurationValueText.Text = $"{targetMs} ms";
+            _suppressEvents = false;
+
+            _themeService.SetToolbarPopupSpeed(speed, targetMs);
+            PlayPreviewEntranceAnimation(targetMs);
+        }
+    }
+
+    private void OnPopupDurationChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_suppressEvents || PopupDurationValueText is null) return;
+        var ms = ThemeResolver.ClampPopupDurationMs((int)Math.Round(e.NewValue));
+        PopupDurationValueText.Text = $"{ms} ms";
+        var preset = ThemeResolver.ResolvePopupSpeedPreset(ms);
+
+        _suppressEvents = true;
+        SelectListBoxByTag(PopupSpeedSegmented, preset.ToString());
+        _suppressEvents = false;
+
+        _themeService.SetToolbarPopupSpeed(ToolbarPopupSpeed.Custom, ms);
+    }
+
+    private void OnPopupDurationSliderMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        PlayPreviewEntranceAnimation(_themeService.CurrentPopupDurationMs);
+    }
+
+    private void OnPopupDurationValueMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            _themeService.SetToolbarPopupSpeed(ToolbarPopupSpeed.Fast, ThemeResolver.FastPopupDurationMs);
+            PlayPreviewEntranceAnimation(ThemeResolver.FastPopupDurationMs);
+            e.Handled = true;
+        }
+    }
+
+    private void OnReplayPopupPreviewClick(object sender, RoutedEventArgs e)
+    {
+        PlayPreviewEntranceAnimation(_themeService.CurrentPopupDurationMs);
+    }
+
+    private void PlayPreviewEntranceAnimation(int durationMs)
+    {
+        if (PreviewPillContainer is null) return;
+
+        PreviewPillContainer.BeginAnimation(OpacityProperty, null);
+        PreviewPopSlide.BeginAnimation(TranslateTransform.YProperty, null);
+        PreviewPopScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        PreviewPopScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+
+        if (durationMs <= 0 || !SelectorMotion.Enabled)
+        {
+            PreviewPillContainer.Opacity = 1;
+            PreviewPopSlide.Y = 0;
+            PreviewPopScale.ScaleX = 1;
+            PreviewPopScale.ScaleY = 1;
+            return;
+        }
+
+        var dur = TimeSpan.FromMilliseconds(durationMs);
+        var fadeDur = TimeSpan.FromMilliseconds(Math.Max(25, Math.Round(durationMs * 0.65)));
+        var isSnappy = durationMs <= 140;
+        var popEase = isSnappy ? SelectorMotion.CubicOutEase : SelectorMotion.ToolbarPopEase;
+        var startScale = isSnappy ? 0.93 : 0.89;
+        var travelPx = isSnappy ? 7.0 : 11.0;
+
+        PreviewPillContainer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, fadeDur) { EasingFunction = SelectorMotion.CubicOutEase });
+        PreviewPopSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(travelPx, 0, dur) { EasingFunction = SelectorMotion.StandardEase });
+        PreviewPopScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(startScale, 1.0, dur) { EasingFunction = popEase });
+        PreviewPopScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(startScale, 1.0, dur) { EasingFunction = popEase });
+    }
+
     // ───────────── Plugin Management Handlers ─────────────
 
     private void PopulateInspectorIconPresets()
@@ -692,7 +819,16 @@ public partial class SettingsWindow : Window
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Cursor = Cursors.Hand
             };
-            btn.Click += (_, _) => PluginIconBox.Text = preset.Value;
+            btn.Click += (_, _) =>
+            {
+                PluginIconBox.Text = preset.Value;
+                if (PluginsListBox.SelectedItem is PluginListItem selected)
+                {
+                    _pluginRegistry.SetCustomIcon(selected.Id, preset.Value);
+                    _themeService.NotifyToolbarAppearanceChanged();
+                    _diagnostics.Write($"已更新插件「{selected.Name}」图标为: {preset.Value}");
+                }
+            };
             InspectorIconPresets.Children.Add(btn);
         }
     }
@@ -737,7 +873,7 @@ public partial class SettingsWindow : Window
 
     private void OnPluginSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _optionEditors.Clear();
+        _optionGetters.Clear();
         OptionsContainer.Children.Clear();
         SaveOptionsButton.Visibility = Visibility.Collapsed;
 
@@ -749,6 +885,10 @@ public partial class SettingsWindow : Window
             DetailConditionText.Text = string.Empty;
             PluginIconBox.Text = string.Empty;
             SaveIconButton.IsEnabled = false;
+            BrowseIconButton.IsEnabled = false;
+            ResetIconButton.IsEnabled = false;
+            PluginDisplayModeSegmented.IsEnabled = false;
+            ToggleIconColorModeButton.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -758,15 +898,38 @@ public partial class SettingsWindow : Window
 
         DetailIconHost.Content = VectorIconFactory.CreateIcon(m.Icon, fg, invFg, size: 16);
         DetailTitleText.Text = m.Name;
-        DetailMetaText.Text = $"ID: {m.Id}\n类型: {m.Kind} · 来源: {item.SourceLabel} · 执行后: {m.After}" +
+        var displayModeLabel = m.DisplayMode switch
+        {
+            ToolbarDisplayMode.IconOnly => "仅图标",
+            ToolbarDisplayMode.TextOnly => "仅名称",
+            ToolbarDisplayMode.IconAndText => "图标+名称",
+            _ => "跟随全局"
+        };
+        DetailMetaText.Text = $"ID: {m.Id}\n类型: {m.Kind} · 来源: {item.SourceLabel} · 展示: {displayModeLabel} · 执行后: {m.After}" +
                               (string.IsNullOrWhiteSpace(m.SourceFilePath) ? string.Empty : $"\n文件: {m.SourceFilePath}");
         DetailConditionText.Text =
             $"需求条件: {(m.Requirements.Count > 0 ? string.Join(", ", m.Requirements) : "无")}\n" +
             $"正则过滤: {(string.IsNullOrWhiteSpace(m.Regex) ? "无" : m.Regex)}\n" +
             $"限定进程: {(m.AllowedApps.Count > 0 ? string.Join(", ", m.AllowedApps) : "全部应用")}";
 
+        _suppressEvents = true;
+        PluginDisplayModeSegmented.IsEnabled = true;
+        SelectListBoxByTag(PluginDisplayModeSegmented, m.DisplayMode?.ToString() ?? "FollowGlobal");
+        _suppressEvents = false;
+
         PluginIconBox.Text = m.Icon;
         SaveIconButton.IsEnabled = true;
+        BrowseIconButton.IsEnabled = true;
+        ResetIconButton.IsEnabled = !string.Equals(m.Icon, m.DefaultIcon, StringComparison.Ordinal);
+        if (VectorIconFactory.TryExtractImageFileSpec(m.Icon, out _, out var forceColor))
+        {
+            ToggleIconColorModeButton.Visibility = Visibility.Visible;
+            ToggleIconColorModeButton.Content = forceColor ? "切换为自适应单色" : "保留原色";
+        }
+        else
+        {
+            ToggleIconColorModeButton.Visibility = Visibility.Collapsed;
+        }
 
         if (m.Options.Count == 0)
         {
@@ -779,7 +942,30 @@ public partial class SettingsWindow : Window
         var resolved = _pluginRegistry.GetResolvedOptions(m);
         foreach (var opt in m.Options)
         {
-            OptionsContainer.Children.Add(new TextBlock { Text = opt.Label, FontWeight = FontWeights.Medium, Margin = new Thickness(0, 0, 0, 3) });
+            var currentVal = resolved.TryGetValue(opt.Key, out var val) ? val : opt.DefaultValue;
+
+            if (opt.Type == PluginOptionType.Boolean)
+            {
+                var cb = new CheckBox
+                {
+                    Content = opt.Label,
+                    IsChecked = string.Equals(currentVal, "true", StringComparison.OrdinalIgnoreCase),
+                    Margin = new Thickness(0, 2, 0, 8)
+                };
+                _optionGetters[opt.Key] = () => cb.IsChecked == true ? "true" : "false";
+                OptionsContainer.Children.Add(cb);
+                if (!string.IsNullOrWhiteSpace(opt.Description))
+                {
+                    var descBlock = new TextBlock { Text = opt.Description, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, -4, 0, 10) };
+                    descBlock.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+                    OptionsContainer.Children.Add(descBlock);
+                }
+                continue;
+            }
+
+            var optLabel = new TextBlock { Text = opt.Label, FontWeight = FontWeights.Medium, Margin = new Thickness(0, 0, 0, 3) };
+            optLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+            OptionsContainer.Children.Add(optLabel);
             if (!string.IsNullOrWhiteSpace(opt.Description))
             {
                 var descBlock = new TextBlock { Text = opt.Description, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 5) };
@@ -787,13 +973,36 @@ public partial class SettingsWindow : Window
                 OptionsContainer.Children.Add(descBlock);
             }
 
-            var tb = new TextBox
+            if (opt.Type == PluginOptionType.Choice && opt.Choices.Count > 0)
             {
-                Text = resolved.TryGetValue(opt.Key, out var val) ? val : opt.DefaultValue,
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-            _optionEditors[opt.Key] = tb;
-            OptionsContainer.Children.Add(tb);
+                var combo = new ComboBox { Margin = new Thickness(0, 0, 0, 10) };
+                var selectedIdx = 0;
+                for (var i = 0; i < opt.Choices.Count; i++)
+                {
+                    var code = opt.Choices[i];
+                    var display = (i < opt.ChoiceLabels.Count && !string.IsNullOrWhiteSpace(opt.ChoiceLabels[i]))
+                        ? $"{opt.ChoiceLabels[i]} ({code})"
+                        : code;
+                    combo.Items.Add(new ComboBoxItem { Content = display, Tag = code });
+                    if (string.Equals(code, currentVal, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selectedIdx = i;
+                    }
+                }
+                combo.SelectedIndex = selectedIdx;
+                _optionGetters[opt.Key] = () => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? currentVal;
+                OptionsContainer.Children.Add(combo);
+            }
+            else
+            {
+                var tb = new TextBox
+                {
+                    Text = currentVal,
+                    Margin = new Thickness(0, 0, 0, 10)
+                };
+                _optionGetters[opt.Key] = () => tb.Text.Trim();
+                OptionsContainer.Children.Add(tb);
+            }
         }
 
         SaveOptionsButton.Visibility = Visibility.Visible;
@@ -802,14 +1011,99 @@ public partial class SettingsWindow : Window
     private void OnSaveIconClick(object sender, RoutedEventArgs e)
     {
         if (PluginsListBox.SelectedItem is not PluginListItem item) return;
-        _pluginRegistry.SetCustomIcon(item.Id, PluginIconBox.Text);
-        _diagnostics.Write($"已更新插件「{item.Name}」图标为: {PluginIconBox.Text.Trim()}");
+        var raw = PluginIconBox.Text.Trim();
+        if (VectorIconFactory.TryExtractImageFileSpec(raw, out var path, out var forceColor) &&
+            !raw.StartsWith("file:", StringComparison.OrdinalIgnoreCase) &&
+            !raw.StartsWith("file-color:", StringComparison.OrdinalIgnoreCase))
+        {
+            raw = forceColor ? $"file-color:{path}" : $"file:{path}";
+        }
+        _pluginRegistry.SetCustomIcon(item.Id, raw);
+        _themeService.NotifyToolbarAppearanceChanged();
+        _diagnostics.Write($"已更新插件「{item.Name}」图标为: {raw}");
+    }
+
+    private void OnBrowsePluginIconClick(object sender, RoutedEventArgs e)
+    {
+        if (PluginsListBox.SelectedItem is not PluginListItem item) return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"为「{item.Name}」选择自定义浮窗图标",
+            Filter = "图片与矢量图标 (*.png;*.svg;*.ico;*.jpg;*.jpeg;*.webp;*.bmp)|*.png;*.svg;*.ico;*.jpg;*.jpeg;*.webp;*.bmp|所有文件 (*.*)|*.*",
+            Multiselect = false
+        };
+
+        if (dlg.ShowDialog(this) != true || string.IsNullOrWhiteSpace(dlg.FileName)) return;
+
+        try
+        {
+            var storedPath = VectorIconFactory.SaveCustomIconFile(dlg.FileName, item.Id, AppPaths.GetCustomIconsDirectory());
+            var iconSpec = $"file:{storedPath}";
+            PluginIconBox.Text = iconSpec;
+            _pluginRegistry.SetCustomIcon(item.Id, iconSpec);
+            _themeService.NotifyToolbarAppearanceChanged();
+            _diagnostics.Write($"已为插件「{item.Name}」应用自定义图标: {Path.GetFileName(dlg.FileName)}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"导入图标失败：{ex.Message}", "Selector", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnToggleIconColorModeClick(object sender, RoutedEventArgs e)
+    {
+        if (PluginsListBox.SelectedItem is not PluginListItem item) return;
+        if (!VectorIconFactory.TryExtractImageFileSpec(item.Icon, out var path, out var forceColor)) return;
+
+        var nextSpec = forceColor ? $"file:{path}" : $"file-color:{path}";
+        PluginIconBox.Text = nextSpec;
+        _pluginRegistry.SetCustomIcon(item.Id, nextSpec);
+        _themeService.NotifyToolbarAppearanceChanged();
+        _diagnostics.Write($"已切换插件「{item.Name}」图标色彩模式为: {(forceColor ? "自适应深浅色单色" : "保留原色")}");
+    }
+
+    private void OnResetPluginIconClick(object sender, RoutedEventArgs e)
+    {
+        if (PluginsListBox.SelectedItem is not PluginListItem item) return;
+        _pluginRegistry.ResetCustomIcon(item.Id);
+        _themeService.NotifyToolbarAppearanceChanged();
+        _diagnostics.Write($"已恢复插件「{item.Name}」默认图标");
+    }
+
+    private void OnPluginDisplayModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        if (PluginsListBox.SelectedItem is not PluginListItem item) return;
+        if (PluginDisplayModeSegmented.SelectedItem is not ListBoxItem selected) return;
+
+        var tag = selected.Tag?.ToString();
+        ToolbarDisplayMode? mode = tag switch
+        {
+            "IconOnly" => ToolbarDisplayMode.IconOnly,
+            "TextOnly" => ToolbarDisplayMode.TextOnly,
+            "IconAndText" => ToolbarDisplayMode.IconAndText,
+            _ => null
+        };
+
+        if (item.Manifest.DisplayMode == mode) return;
+
+        _pluginRegistry.SetDisplayMode(item.Id, mode);
+        _themeService.NotifyToolbarAppearanceChanged();
+        var label = mode switch
+        {
+            ToolbarDisplayMode.IconOnly => "仅图标",
+            ToolbarDisplayMode.TextOnly => "仅名称",
+            ToolbarDisplayMode.IconAndText => "图标 + 名称",
+            _ => "跟随全局"
+        };
+        _diagnostics.Write($"已设置插件「{item.Name}」浮窗展示形式为: {label}");
     }
 
     private void OnSaveOptionsClick(object sender, RoutedEventArgs e)
     {
         if (PluginsListBox.SelectedItem is not PluginListItem item) return;
-        var values = _optionEditors.ToDictionary(kv => kv.Key, kv => kv.Value.Text.Trim());
+        var values = _optionGetters.ToDictionary(kv => kv.Key, kv => kv.Value());
         _pluginRegistry.SaveOptionValues(item.Id, values);
         MessageBox.Show(this, "插件选项已保存。", "Selector", MessageBoxButton.OK, MessageBoxImage.Information);
     }
@@ -856,16 +1150,29 @@ public partial class SettingsWindow : Window
     private void OnDeletePluginClick(object sender, RoutedEventArgs e)
     {
         if (PluginsListBox.SelectedItem is not PluginListItem item) return;
-        if (item.Manifest.Source != PluginSourceType.UserCustom)
+
+        if (item.Manifest.Source == PluginSourceType.UserCustom)
         {
-            MessageBox.Show(this, "内置或外部文件插件不可在此删除，你可以取消勾选将其停用。", "Selector", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (MessageBox.Show(this, $"确认删除自定义插件「{item.Name}」吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                _pluginRegistry.RemoveCustomPlugin(item.Id);
+            }
             return;
         }
 
-        if (MessageBox.Show(this, $"确认删除自定义插件「{item.Name}」吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (item.Manifest.Source == PluginSourceType.ExternalFile &&
+            !string.IsNullOrWhiteSpace(item.Manifest.SourceFilePath) &&
+            Path.GetFullPath(item.Manifest.SourceFilePath).StartsWith(Path.GetFullPath(_userPluginsDir), StringComparison.OrdinalIgnoreCase))
         {
-            _pluginRegistry.RemoveCustomPlugin(item.Id);
+            if (MessageBox.Show(this, $"确认卸载已安装的扩展「{item.Name}」并删除其插件目录吗？", "确认卸载", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                _pluginRegistry.RemoveInstalledExternalPlugin(item.Id, _userPluginsDir);
+                SetPluginDropStatus("SuccessBrush", $"已卸载扩展「{item.Name}」");
+            }
+            return;
         }
+
+        MessageBox.Show(this, "官方内置或随程序附带的插件不可删除，你可以取消勾选将其停用。", "Selector", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnRowMoveUpClick(object sender, RoutedEventArgs e)
@@ -965,20 +1272,28 @@ public partial class SettingsWindow : Window
     {
         if (_dragSourceContainer is null) return;
 
-        _isDraggingPlugin = true;
-        _dragAdornerLayer = AdornerLayer.GetAdornerLayer(PluginsListBox);
-        if (_dragAdornerLayer is not null)
+        try
         {
-            var accent = TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
-            var surface = TryFindResource("FlyoutBrush") as Brush ?? Brushes.White;
-            _dragAdorner = new PluginDragAdorner(PluginsListBox, _dragSourceContainer, accent, surface);
-            _dragAdornerLayer.Add(_dragAdorner);
-        }
+            _isDraggingPlugin = true;
+            _dragAdornerLayer = AdornerLayer.GetAdornerLayer(PluginsListBox);
+            if (_dragAdornerLayer is not null)
+            {
+                var accent = TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+                var surface = TryFindResource("FlyoutBrush") as Brush ?? Brushes.White;
+                _dragAdorner = new PluginDragAdorner(PluginsListBox, _dragSourceContainer, accent, surface);
+                _dragAdornerLayer.Add(_dragAdorner);
+            }
 
-        _dragSourceContainer.Opacity = 0.25;
-        PluginsListBox.Cursor = Cursors.SizeNS;
-        PluginsListBox.CaptureMouse();
-        UpdatePluginDrag(pos);
+            _dragSourceContainer.Opacity = 0.25;
+            PluginsListBox.Cursor = Cursors.SizeNS;
+            PluginsListBox.CaptureMouse();
+            UpdatePluginDrag(pos);
+        }
+        catch (Exception ex)
+        {
+            _diagnostics.Write($"插件拖拽启动异常：{ex.Message}");
+            EndPluginDrag(commit: false);
+        }
     }
 
     private void UpdatePluginDrag(Point pos)
@@ -1064,10 +1379,8 @@ public partial class SettingsWindow : Window
             if (finalIndex != sourceIdx)
             {
                 _pluginRegistry.MovePluginToIndex(draggedId, finalIndex);
-                if (PluginsListBox.ItemsSource is IEnumerable<PluginListItem> items)
-                {
-                    PluginsListBox.SelectedItem = items.FirstOrDefault(i => i.Id.Equals(draggedId, StringComparison.OrdinalIgnoreCase));
-                }
+                RefreshPluginsList();
+                SelectPluginById(draggedId);
             }
         }
     }
@@ -1119,6 +1432,193 @@ public partial class SettingsWindow : Window
             if (found is not null) return found;
         }
         return null;
+    }
+
+    private void OnOpenPopClipExtensionsClick(object sender, RoutedEventArgs e) => OpenExternalUrl(PopClipExtensionsUrl);
+
+    private void OpenExternalUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"无法打开浏览器链接：{ex.Message}", "Selector", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void OnInstallPluginFilesClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择 PopClip / Selector 扩展文件",
+            Multiselect = true,
+            Filter = "支持的所有扩展 (*.popclipextz;*.zip;*.json;*.ts;*.js;*.popcliptxt;*.yaml;*.yml)|*.popclipextz;*.zip;*.json;*.ts;*.js;*.popcliptxt;*.yaml;*.yml|PopClip 扩展包 (*.popclipextz;*.zip)|*.popclipextz;*.zip|PopClip 脚本/Snippet (*.ts;*.js;*.popcliptxt;*.yaml;*.yml;*.txt)|*.ts;*.js;*.popcliptxt;*.yaml;*.yml;*.txt|Selector JSON (*.json)|*.json|所有文件 (*.*)|*.*"
+        };
+
+        if (dialog.ShowDialog(this) == true && dialog.FileNames.Length > 0)
+        {
+            await InstallPluginPathsAsync(dialog.FileNames);
+        }
+    }
+
+    private void OnPluginsPageDragEnter(object sender, DragEventArgs e)
+    {
+        if (IsExternalPluginDrop(e.Data))
+        {
+            e.Effects = DragDropEffects.Copy;
+            PluginDropOverlay.Visibility = Visibility.Visible;
+            e.Handled = true;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+    }
+
+    private void OnPluginsPageDragOver(object sender, DragEventArgs e)
+    {
+        if (IsExternalPluginDrop(e.Data))
+        {
+            e.Effects = DragDropEffects.Copy;
+            PluginDropOverlay.Visibility = Visibility.Visible;
+            e.Handled = true;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+    }
+
+    private void OnPluginsPageDragLeave(object sender, DragEventArgs e)
+    {
+        var pos = e.GetPosition(PagePlugins);
+        if (pos.X <= 1 || pos.Y <= 1 || pos.X >= PagePlugins.ActualWidth - 1 || pos.Y >= PagePlugins.ActualHeight - 1)
+        {
+            PluginDropOverlay.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void OnPluginsPageDrop(object sender, DragEventArgs e)
+    {
+        PluginDropOverlay.Visibility = Visibility.Collapsed;
+        if (!IsExternalPluginDrop(e.Data)) return;
+        e.Handled = true;
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) &&
+            e.Data.GetData(DataFormats.FileDrop) is string[] files &&
+            files.Length > 0)
+        {
+            await InstallPluginPathsAsync(files);
+            return;
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.UnicodeText) &&
+            e.Data.GetData(DataFormats.UnicodeText) is string text &&
+            PopClipSnippetParser.LooksLikePopClipSnippet(text))
+        {
+            if (_pluginRegistry.TryImportPopClipSnippet(text, out var imported, out var err) && imported is not null)
+            {
+                SetPluginDropStatus("SuccessBrush", $"已安装并启用 PopClip Snippet「{imported.Name}」");
+                _diagnostics.Write($"通过拖入文本安装 PopClip Snippet：{imported.Name} ({imported.Kind})");
+                SelectPluginById(imported.Id);
+            }
+            else
+            {
+                SetPluginDropStatus("CriticalBrush", $"Snippet 安装失败：{err}");
+            }
+        }
+    }
+
+    private static bool IsExternalPluginDrop(IDataObject data)
+    {
+        if (data.GetDataPresent(DataFormats.FileDrop)) return true;
+        if (data.GetDataPresent(DataFormats.UnicodeText) &&
+            data.GetData(DataFormats.UnicodeText) is string text &&
+            PopClipSnippetParser.LooksLikePopClipSnippet(text))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private async Task InstallPluginPathsAsync(string[] paths)
+    {
+        if (_isInstallingPlugins)
+        {
+            SetPluginDropStatus("CautionBrush", "正在安装上一个扩展包，请稍候...");
+            return;
+        }
+
+        _isInstallingPlugins = true;
+        ChoosePluginFileBtn.IsEnabled = false;
+        SetPluginDropStatus("CautionBrush", $"正在解析/重编译并安装 {paths.Length} 个扩展项...");
+
+        try
+        {
+            var batch = await Task.Run(() =>
+                PluginPackageInstaller.InstallFromPaths(paths, _userPluginsDir, _pluginRegistry));
+
+            if (batch.SucceededCount > 0 && batch.FailedCount == 0)
+            {
+                var names = string.Join("、", batch.Items.Where(i => i.Success).Select(i => i.Recompiled ? $"「{i.PluginName}」(已自动重编译)" : $"「{i.PluginName}」"));
+                SetPluginDropStatus("SuccessBrush", $"已安装并启用 {batch.SucceededCount} 个扩展：{names}");
+                _diagnostics.Write($"拖入安装扩展成功：{names}");
+            }
+            else if (batch.SucceededCount > 0 && batch.FailedCount > 0)
+            {
+                var firstErr = batch.Items.First(i => !i.Success);
+                SetPluginDropStatus("CautionBrush", $"成功安装 {batch.SucceededCount} 个，失败 {batch.FailedCount} 个（{firstErr.SourceName}: {firstErr.ErrorMessage}）");
+                _diagnostics.Write($"批量安装部分失败：{firstErr.SourceName} - {firstErr.ErrorMessage}");
+            }
+            else
+            {
+                var firstErr = batch.Items.FirstOrDefault();
+                var reason = firstErr is null ? "未检测到有效扩展文件" : $"{firstErr.SourceName}：{firstErr.ErrorMessage}";
+                SetPluginDropStatus("CriticalBrush", $"安装失败：{reason}");
+                _diagnostics.Write($"安装扩展失败：{reason}");
+            }
+
+            // Synchronously refresh list on UI thread before selecting to prevent PluginsChanged InvokeAsync race
+            RefreshPluginsList();
+            RefreshOverviewSummaries();
+
+            var lastInstalledId = batch.Items.LastOrDefault(i => i.Success)?.PluginId;
+            if (!string.IsNullOrWhiteSpace(lastInstalledId))
+            {
+                SelectPluginById(lastInstalledId);
+            }
+        }
+        catch (Exception ex)
+        {
+            SetPluginDropStatus("CriticalBrush", $"安装异常：{ex.Message}");
+            _diagnostics.Write($"安装扩展异常：{ex.Message}");
+        }
+        finally
+        {
+            _isInstallingPlugins = false;
+            ChoosePluginFileBtn.IsEnabled = true;
+        }
+    }
+
+    private void SetPluginDropStatus(string dotBrushKey, string message)
+    {
+        PluginDropStatusDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, dotBrushKey);
+        PluginDropStatusText.Text = message;
+    }
+
+    private void SelectPluginById(string pluginId)
+    {
+        if (PluginsListBox.ItemsSource is IEnumerable<PluginListItem> items)
+        {
+            var match = items.FirstOrDefault(i => i.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                PluginsListBox.SelectedItem = match;
+                PluginsListBox.ScrollIntoView(match);
+            }
+        }
     }
 
     private void OnReloadPluginsClick(object sender, RoutedEventArgs e)

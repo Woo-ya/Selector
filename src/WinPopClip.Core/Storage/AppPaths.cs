@@ -13,4 +13,7 @@ public static class AppPaths
 
     public static string GetUserPluginsDirectory(string? dataDirectory = null) =>
         Path.Combine(dataDirectory ?? DefaultDataDirectory, "plugins");
+
+    public static string GetCustomIconsDirectory(string? dataDirectory = null) =>
+        Path.Combine(dataDirectory ?? DefaultDataDirectory, "icons");
 }

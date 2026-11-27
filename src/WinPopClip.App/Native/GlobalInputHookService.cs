@@ -1,14 +1,22 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinPopClip.Core.Models;
 
 namespace WinPopClip.App.Native;
 
-public sealed record SelectionGestureEventArgs(ScreenPoint ReleasePoint, bool IsDoubleClick);
+public sealed record SelectionGestureEventArgs(
+    ScreenPoint StartPoint,
+    ScreenPoint ReleasePoint,
+    bool IsDoubleClick,
+    long EventSequence = 0,
+    bool SawIBeamCursor = false,
+    bool WindowMovedDuringDrag = false);
+
+public sealed record DismissEventArgs(long EventSequence);
 
 /// <summary>
-/// Global low-level mouse & keyboard hook service detecting text selection completion
-/// (drag release, double-click word select) and dismissal gestures while ignoring our own synthetic inputs.
+/// Global low-level mouse & keyboard hook service running on a dedicated lightweight native Win32
+/// message-pump thread (completely decoupled from WPF UI / COM / Clipboard work) so Windows mouse
+/// input can NEVER stall or freeze even if the UI or clipboard is momentarily busy.
 /// </summary>
 public sealed class GlobalInputHookService : IDisposable
 {
@@ -16,21 +24,31 @@ public sealed class GlobalInputHookService : IDisposable
     private readonly Func<AppSettings> _getSettings;
     private readonly Action<string>? _log;
 
+    private readonly object _lifecycleLock = new();
+    private Thread? _hookThread;
+    private uint _hookThreadId;
     private IntPtr _mouseHook = IntPtr.Zero;
     private IntPtr _keyboardHook = IntPtr.Zero;
     private Win32Interop.LowLevelHookProc? _mouseProc;
     private Win32Interop.LowLevelHookProc? _keyboardProc;
+    private volatile bool _running;
 
     private bool _isLeftButtonDown;
+    private bool _dragSawIBeam;
+    private int _dragIBeamSamples;
+    private IntPtr _downForegroundHwnd;
+    private Win32Interop.RECT _downForegroundRect;
     private ScreenPoint _leftDownPoint;
     private long _lastClickTick;
     private ScreenPoint _lastClickPoint;
+    private long _eventSequence;
 
     /// <summary>Set to true while ClipboardGuard is sending Ctrl+C/V/X so hooks ignore synthetic events.</summary>
     public volatile bool SuppressKeyboardDismiss;
 
     public event EventHandler<SelectionGestureEventArgs>? SelectionGestureCompleted;
-    public event EventHandler? DismissRequested;
+    public event EventHandler<DismissEventArgs>? DismissRequested;
+    public event EventHandler? DragStarted;
 
     public GlobalInputHookService(
         Func<ScreenPoint, bool> isPointInsideToolbar,
@@ -44,44 +62,102 @@ public sealed class GlobalInputHookService : IDisposable
 
     public void Start()
     {
-        if (_mouseHook != IntPtr.Zero) return;
-
-        _mouseProc = MouseHookCallback;
-        _keyboardProc = KeyboardHookCallback;
-
-        using var curProcess = Process.GetCurrentProcess();
-        using var curModule = curProcess.MainModule;
-        var moduleHandle = Win32Interop.GetModuleHandle(curModule?.ModuleName);
-
-        _mouseHook = Win32Interop.SetWindowsHookEx(Win32Interop.WH_MOUSE_LL, _mouseProc, moduleHandle, 0);
-        if (_mouseHook == IntPtr.Zero)
+        lock (_lifecycleLock)
         {
-            _log?.Invoke($"[错误] 安装全局鼠标钩子失败 (Win32Error={Marshal.GetLastWin32Error()})");
-        }
+            if (_running) return;
+            _running = true;
 
-        _keyboardHook = Win32Interop.SetWindowsHookEx(Win32Interop.WH_KEYBOARD_LL, _keyboardProc, moduleHandle, 0);
-        if (_keyboardHook == IntPtr.Zero)
-        {
-            _log?.Invoke($"[错误] 安装全局键盘钩子失败 (Win32Error={Marshal.GetLastWin32Error()})");
-        }
-
-        if (_mouseHook != IntPtr.Zero && _keyboardHook != IntPtr.Zero)
-        {
-            _log?.Invoke("全局鼠标与键盘钩子已就绪");
+            using var readyEvent = new ManualResetEventSlim(false);
+            var thread = new Thread(() => RunHookMessageLoop(readyEvent))
+            {
+                Name = "Selector-LowLevelHookThread",
+                IsBackground = true,
+                Priority = ThreadPriority.Highest
+            };
+            _hookThread = thread;
+            thread.Start();
+            readyEvent.Wait(TimeSpan.FromMilliseconds(1500));
         }
     }
 
     public void Stop()
     {
-        if (_mouseHook != IntPtr.Zero)
+        Thread? threadToJoin;
+        uint threadId;
+
+        lock (_lifecycleLock)
         {
-            Win32Interop.UnhookWindowsHookEx(_mouseHook);
-            _mouseHook = IntPtr.Zero;
+            if (!_running && _hookThread is null) return;
+            _running = false;
+            threadToJoin = _hookThread;
+            threadId = _hookThreadId;
+            _hookThread = null;
+            _hookThreadId = 0;
         }
-        if (_keyboardHook != IntPtr.Zero)
+
+        if (threadId != 0)
         {
-            Win32Interop.UnhookWindowsHookEx(_keyboardHook);
-            _keyboardHook = IntPtr.Zero;
+            Win32Interop.PostThreadMessageW(threadId, Win32Interop.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        if (threadToJoin is not null && threadToJoin.IsAlive && threadToJoin != Thread.CurrentThread)
+        {
+            threadToJoin.Join(TimeSpan.FromMilliseconds(800));
+        }
+    }
+
+    private void RunHookMessageLoop(ManualResetEventSlim readyEvent)
+    {
+        _hookThreadId = Win32Interop.GetCurrentThreadId();
+        _mouseProc = MouseHookCallback;
+        _keyboardProc = KeyboardHookCallback;
+
+        try
+        {
+            var moduleHandle = Win32Interop.GetModuleHandle(null);
+
+            _mouseHook = Win32Interop.SetWindowsHookEx(Win32Interop.WH_MOUSE_LL, _mouseProc, moduleHandle, 0);
+            if (_mouseHook == IntPtr.Zero)
+            {
+                _log?.Invoke($"[错误] 安装全局鼠标钩子失败 (Win32Error={Marshal.GetLastWin32Error()})");
+            }
+
+            _keyboardHook = Win32Interop.SetWindowsHookEx(Win32Interop.WH_KEYBOARD_LL, _keyboardProc, moduleHandle, 0);
+            if (_keyboardHook == IntPtr.Zero)
+            {
+                _log?.Invoke($"[错误] 安装全局键盘钩子失败 (Win32Error={Marshal.GetLastWin32Error()})");
+            }
+
+            if (_mouseHook != IntPtr.Zero && _keyboardHook != IntPtr.Zero)
+            {
+                _log?.Invoke("全局鼠标与键盘钩子已就绪（独立轻量消息线程）");
+            }
+        }
+        finally
+        {
+            readyEvent.Set();
+        }
+
+        try
+        {
+            while (_running && Win32Interop.GetMessageW(out var msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                Win32Interop.TranslateMessage(ref msg);
+                Win32Interop.DispatchMessageW(ref msg);
+            }
+        }
+        finally
+        {
+            if (_mouseHook != IntPtr.Zero)
+            {
+                Win32Interop.UnhookWindowsHookEx(_mouseHook);
+                _mouseHook = IntPtr.Zero;
+            }
+            if (_keyboardHook != IntPtr.Zero)
+            {
+                Win32Interop.UnhookWindowsHookEx(_keyboardHook);
+                _keyboardHook = IntPtr.Zero;
+            }
         }
     }
 
@@ -111,7 +187,38 @@ public sealed class GlobalInputHookService : IDisposable
 
                     _isLeftButtonDown = true;
                     _leftDownPoint = point;
-                    DismissRequested?.Invoke(this, EventArgs.Empty);
+                    _dragSawIBeam = Win32Interop.IsCurrentCursorIBeam();
+                    _dragIBeamSamples = 0;
+                    _downForegroundHwnd = Win32Interop.GetForegroundWindow();
+                    _downForegroundRect = default;
+                    if (_downForegroundHwnd != IntPtr.Zero)
+                    {
+                        Win32Interop.GetWindowRect(_downForegroundHwnd, out _downForegroundRect);
+                    }
+                    RaiseDismissAsync();
+                    RaiseDragStartedAsync();
+                    break;
+
+                case Win32Interop.WM_MOUSEMOVE:
+                    if (_isLeftButtonDown && !_dragSawIBeam && _dragIBeamSamples < 6)
+                    {
+                        var dx = point.X - _leftDownPoint.X;
+                        var dy = point.Y - _leftDownPoint.Y;
+                        var distSq = dx * dx + dy * dy;
+
+                        // Lightweight I-beam check (up to 6 distance-gated samples per drag, short-circuiting as soon
+                        // as IDC_IBEAM is observed) so Doubao-style deferred capture reliably catches drags that start
+                        // on a message bubble margin and end outside the text area while still rejecting window/scrollbar drags.
+                        var minDist = 10 + _dragIBeamSamples * 24; // 10, 34, 58, 82, 106, 130 px
+                        if (distSq >= minDist * minDist)
+                        {
+                            _dragIBeamSamples++;
+                            if (Win32Interop.IsCurrentCursorIBeam())
+                            {
+                                _dragSawIBeam = true;
+                            }
+                        }
+                    }
                     break;
 
                 case Win32Interop.WM_LBUTTONUP:
@@ -134,7 +241,7 @@ public sealed class GlobalInputHookService : IDisposable
                 case Win32Interop.WM_MOUSEWHEEL:
                     if (!_isPointInsideToolbar(point))
                     {
-                        DismissRequested?.Invoke(this, EventArgs.Empty);
+                        RaiseDismissAsync();
                     }
                     break;
             }
@@ -161,24 +268,78 @@ public sealed class GlobalInputHookService : IDisposable
             return;
         }
 
-        var dx = Math.Abs(upPoint.X - _leftDownPoint.X);
-        var dy = Math.Abs(upPoint.Y - _leftDownPoint.Y);
+        var startPoint = _leftDownPoint;
+        var dx = Math.Abs(upPoint.X - startPoint.X);
+        var dy = Math.Abs(upPoint.Y - startPoint.Y);
         var distance = Math.Sqrt(dx * dx + dy * dy);
 
         var now = Environment.TickCount64;
-        var isDoubleClick = settings.EnableDoubleClickSelection &&
-                            (now - _lastClickTick) <= 450 &&
-                            Math.Abs(upPoint.X - _lastClickPoint.X) <= 8 &&
-                            Math.Abs(upPoint.Y - _lastClickPoint.Y) <= 8;
+        var doubleClickEnabled = settings.EnableDoubleClickSelection || settings.EnableDialogDoubleClickSummon;
+        var isDoubleClick = doubleClickEnabled &&
+                            (now - _lastClickTick) <= 500 &&
+                            Math.Abs(upPoint.X - _lastClickPoint.X) <= 14 &&
+                            Math.Abs(upPoint.Y - _lastClickPoint.Y) <= 14;
 
         _lastClickTick = now;
         _lastClickPoint = upPoint;
 
         var isDragSelection = distance >= Math.Max(4, settings.DragThresholdPixels);
-        if (isDragSelection || isDoubleClick)
+        var isShiftClickSelection = !isDoubleClick && Win32Interop.IsKeyDown(Win32Interop.VK_SHIFT);
+        if (isDragSelection || isDoubleClick || isShiftClickSelection)
         {
-            SelectionGestureCompleted?.Invoke(this, new SelectionGestureEventArgs(upPoint, isDoubleClick));
+            var sawIBeam = _dragSawIBeam || Win32Interop.IsCurrentCursorIBeam();
+            var windowMoved = false;
+            if (isDragSelection && _downForegroundHwnd != IntPtr.Zero &&
+                Win32Interop.GetWindowRect(_downForegroundHwnd, out var upRect))
+            {
+                windowMoved = upRect.Left != _downForegroundRect.Left ||
+                              upRect.Top != _downForegroundRect.Top ||
+                              upRect.Right != _downForegroundRect.Right ||
+                              upRect.Bottom != _downForegroundRect.Bottom;
+            }
+
+            var seq = Interlocked.Increment(ref _eventSequence);
+            var args = new SelectionGestureEventArgs(startPoint, upPoint, isDoubleClick, seq, sawIBeam, windowMoved);
+            ThreadPool.UnsafeQueueUserWorkItem(state =>
+            {
+                try
+                {
+                    SelectionGestureCompleted?.Invoke(this, (SelectionGestureEventArgs)state!);
+                }
+                catch { }
+            }, args);
         }
+    }
+
+    private void RaiseDismissAsync()
+    {
+        var handler = DismissRequested;
+        if (handler is null) return;
+
+        var seq = Interlocked.Increment(ref _eventSequence);
+        ThreadPool.UnsafeQueueUserWorkItem(state =>
+        {
+            try
+            {
+                handler.Invoke(this, new DismissEventArgs((long)state!));
+            }
+            catch { }
+        }, seq);
+    }
+
+    private void RaiseDragStartedAsync()
+    {
+        var handler = DragStarted;
+        if (handler is null) return;
+
+        ThreadPool.UnsafeQueueUserWorkItem(_ =>
+        {
+            try
+            {
+                handler.Invoke(this, EventArgs.Empty);
+            }
+            catch { }
+        }, null);
     }
 
     private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -190,7 +351,7 @@ public sealed class GlobalInputHookService : IDisposable
             {
                 var kbd = Marshal.PtrToStructure<Win32Interop.KBDLLHOOKSTRUCT>(lParam);
 
-                // CRITICAL FIX: Ignore injected keys (such as our own Ctrl+C fallback) so we don't self-cancel capture!
+                // Ignore injected keys (such as our own Ctrl+C/V/X) so we don't self-cancel capture
                 if ((kbd.flags & Win32Interop.LLKHF_INJECTED) != 0 ||
                     kbd.dwExtraInfo == Win32Interop.SelfInputExtraInfo)
                 {
@@ -208,7 +369,7 @@ public sealed class GlobalInputHookService : IDisposable
                     kbd.vkCode != Win32Interop.VK_LSHIFT &&
                     kbd.vkCode != Win32Interop.VK_RSHIFT)
                 {
-                    DismissRequested?.Invoke(this, EventArgs.Empty);
+                    RaiseDismissAsync();
                 }
             }
         }
